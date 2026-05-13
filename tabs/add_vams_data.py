@@ -1,6 +1,7 @@
 """Tab 3: merge VAMS data into an existing generated workbook."""
 
 import tkinter as tk
+import pandas as pd
 
 from tkinter import (
     filedialog,
@@ -14,6 +15,7 @@ from openpyxl import (
 
 from logic.fast_vams_enrichment import (
     FastVamsEnrichmentEngine,
+    build_fast_keys,
 )
 
 from logic.excel_writer import (
@@ -27,10 +29,6 @@ from logic.parser import (
 
 from logic.vams_enrichment import (
     VAMS_COLUMNS,
-)
-
-from logic.excel_writer.three_uk_qualys import (
-    build_3uk_vams_matching_df,
 )
 
 from logic.excel_writer.formatting import (
@@ -256,37 +254,6 @@ class AddVamsDataTab(ttk.Frame):
                 continue
         return None
     
-    def _normalize_match_value(
-        self,
-        value,
-    ):
-
-        if value is None:
-            return ""
-
-        value = str(value)
-
-        value = value.strip()
-
-        value = value.lower()
-
-        value = value.replace(
-            "\n",
-            " ",
-        )
-
-        value = value.replace(
-            "\r",
-            " ",
-        )
-
-        value = " ".join(
-            value.split()
-        )
-
-        return value
-
-
     def _write_vams_columns_only(
         self,
         path: str,
@@ -323,10 +290,6 @@ class AddVamsDataTab(ttk.Frame):
         # ---------------------------------------------------
         required_columns = [
             "Name",
-            "Host/Image",
-            "Port",
-            "CVE",
-            "Scanner ID",
         ]
         for col in required_columns:
             if col not in headers:
@@ -336,66 +299,44 @@ class AddVamsDataTab(ttk.Frame):
                 )
                 return
         # ---------------------------------------------------
-        # BUILD EXCEL LOOKUP
+        # BUILD EXCEL LOOKUP USING TIERED KEYS
         # ---------------------------------------------------
-        excel_lookup = {}
+        excel_records = []
+        row_numbers = []
         for excel_row in range(
             data_start_row,
             ws.max_row + 1,
         ):
-            try:
-                name = self._normalize_match_value(
+            record = {}
+            for col_name in [
+                "Name",
+                "Host / Image",
+                "Host",
+                "IP",
+                "Port",
+                "CVE",
+                "Scanner ID",
+                "Plugin ID",
+                "QID",
+            ]:
+                col_idx = headers.get(col_name)
+                record[col_name] = (
+                    ws.cell(excel_row, col_idx).value
+                    if col_idx is not None
+                    else ""
+                )
+            excel_records.append(record)
+            row_numbers.append(excel_row)
 
-                    ws.cell(
-                        excel_row,
-                        headers["Name"],
-                    ).value
+        excel_lookup = {}
+        for idx, row_keys in enumerate(build_fast_keys(
+            pd.DataFrame(excel_records)
+        )):
+            for meta in row_keys:
+                excel_lookup.setdefault(
+                    meta["key"],
+                    row_numbers[idx],
                 )
-                # ---------------------------------------------
-                # HOST COLUMN FALLBACKS
-                # ---------------------------------------------
-                host_column = None
-                for possible in [
-                    "Host / Image",
-                    "Host",
-                    "IP",
-                ]:
-                    if possible in headers:
-                        host_column = (
-                            headers[possible]
-                        )
-                        break
-                host = ""
-                if host_column is not None:
-                    host = str(
-                        ws.cell(
-                            excel_row,
-                            host_column,
-                        ).value or ""
-                    ).strip().lower()
-                port = str(
-                    ws.cell(
-                        excel_row,
-                        headers["Port"],
-                    ).value or ""
-                ).strip().lower()
-                cve = str(
-                    ws.cell(
-                        excel_row,
-                        headers["CVE"],
-                    ).value or ""
-                ).strip().lower()
-                key = (
-                    f"{name}|"
-                    f"{host}|"
-                    f"{port}|"
-                    f"{cve}"
-                )
-                excel_lookup[key] = (
-                    excel_row
-                )
-            except Exception:
-                continue
         # ---------------------------------------------------
         # NORMALIZE ENRICHED DF
         # ---------------------------------------------------
@@ -409,65 +350,18 @@ class AddVamsDataTab(ttk.Frame):
         # ---------------------------------------------------
         # WRITE VAMS VALUES
         # ---------------------------------------------------
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             try:
-                name = (
-                    self._normalize_match_value(
-                        row.get(
-                            "Name",
-                            "",
-                        )
+                row_keys = build_fast_keys(
+                    pd.DataFrame([row.to_dict()])
+                )[0]
+                excel_row = None
+                for meta in row_keys:
+                    excel_row = excel_lookup.get(
+                        meta["key"]
                     )
-                )
-
-                host = (
-                    self._normalize_match_value(
-
-                        row.get(
-
-                            "Host / Image",
-
-                            row.get(
-
-                                "Host",
-
-                                row.get(
-                                    "IP",
-                                    "",
-                                ),
-                            ),
-                        )
-                    )
-                )
-
-                port = (
-                    self._normalize_match_value(
-                        row.get(
-                            "Port",
-                            "",
-                        )
-                    )
-                )
-
-                cve = (
-                    self._normalize_match_value(
-                        row.get(
-                            "CVE",
-                            "",
-                        )
-                    )
-                )
-
-                key = (
-                    f"{name}|"
-                    f"{host}|"
-                    f"{port}|"
-                    f"{cve}"
-                )
-
-                excel_row = (
-                    excel_lookup.get(key)
-                )
+                    if excel_row:
+                        break
                 if not excel_row:
                     continue
                 row_updated = False
@@ -490,12 +384,24 @@ class AddVamsDataTab(ttk.Frame):
                     ).strip()
                     if not value:
                         continue
-                    ws.cell(
-                        row=excel_row,
-                        column=col_idx,
-                        value=value,
-                    )
-                    row_updated = True
+                    existing_cell = str(
+                        ws.cell(
+                            row=excel_row,
+                            column=col_idx,
+                        ).value or ""
+                    ).strip().lower()
+                    if existing_cell in [
+                        "",
+                        "nan",
+                        "none",
+                        "n/a",
+                    ]:
+                        ws.cell(
+                            row=excel_row,
+                            column=col_idx,
+                            value=value,
+                        )
+                        row_updated = True
                 if row_updated:
                     updated += 1
             except Exception:
