@@ -137,7 +137,7 @@ def _is_numeric_like(value):
 def _is_empty(value: str) -> bool:
     """Checks if a cell is essentially empty or a placeholder."""
     val = str(value).strip().lower()
-    return not val or val in ["nan", "none", "n/a"]
+    return not val or val == "nan"
 
 
 # ---------------------------------------------------------
@@ -582,16 +582,7 @@ class FastVamsEnrichmentEngine:
                 # FILL ONLY LOGIC
                 # ---------------------------------------------
     
-                if existing_val.lower() in [
-                
-                    "",
-    
-                    "nan",
-    
-                    "none",
-    
-                    "n/a",
-                ]:
+                if _is_empty(existing_val):
     
                     out.at[
                         idx,
