@@ -1,0 +1,294 @@
+from __future__ import annotations
+
+import re
+import pandas as pd
+
+from logic.parser import merge_semicolon, split_values
+
+
+VAMS_COLUMNS = [
+    "Release Remediation Plan",
+    "Release Remediation Date",
+    "Expert Severity",
+    "Expert Score",
+    "Remediation Reference ID",
+    "Disposition",
+    "VAMS (PSL comments)",
+    "MSS Comments",
+]
+
+
+# ---------------------------------------------------------
+# NORMALIZATION HELPERS
+# ---------------------------------------------------------
+
+def _norm(value: object) -> str:
+    return str(value).strip().lower()
+
+
+def _norm_port(value: object) -> str:
+
+    token = _norm(value)
+
+    if re.match(r"^\d+\.0+$", token):
+        return token.split(".", 1)[0]
+
+    return token
+
+
+# ---------------------------------------------------------
+# HOST + PORT EXTRACTION
+# ---------------------------------------------------------
+
+def _extract_host_and_port(value: object):
+
+    text = str(value or "").strip()
+
+    if not text:
+        return "", ""
+
+    host = re.sub(
+        r"\s*\([^)]*\)\s*$",
+        "",
+        text,
+    ).strip()
+
+    ports = re.findall(r"\(([^)]*)\)", text)
+
+    port = ""
+
+    if ports:
+        port = str(ports[0]).strip()
+
+    return host, port
+
+
+# ---------------------------------------------------------
+# CVE NORMALIZATION
+# ---------------------------------------------------------
+
+def _normalize_cve_tokens(value: object):
+
+    tokens = split_values(value)
+
+    out = []
+
+    for token in tokens:
+
+        token = str(token).strip()
+
+        if not token:
+            continue
+
+        if re.match(r"(?i)^cve-\d{4}-\d+$", token):
+            out.append(token.lower())
+            continue
+
+        out.extend(re.findall(r"\d+", token))
+
+    return out
+
+
+# ---------------------------------------------------------
+# FAST KEY BUILDER
+# ---------------------------------------------------------
+
+
+def build_fast_keys(df: pd.DataFrame):
+
+    keys = []
+
+    for _, row in df.iterrows():
+
+        name = _norm(
+            row.get("Name", "")
+        )
+
+        # -----------------------------------------
+        # HOST EXTRACTION
+        # -----------------------------------------
+
+        host_value = str(
+            row.get(
+                "Host / Image",
+                row.get(
+                    "Host",
+                    row.get(
+                        "IP",
+                        "",
+                    ),
+                ),
+            )
+        ).strip()
+
+        extracted_port = ""
+
+        port_match = re.search(
+            r"\((.*?)\)",
+            host_value,
+        )
+
+        if port_match:
+            extracted_port = (
+                port_match.group(1).strip()
+            )
+
+        host_value = re.sub(
+            r"\s*\(.*?\)",
+            "",
+            host_value,
+        ).strip()
+
+        hosts = [
+            _norm(h)
+            for h in re.split(
+                r"[;,]",
+                host_value,
+            )
+            if str(h).strip()
+        ]
+
+        # -----------------------------------------
+        # PORT EXTRACTION
+        # -----------------------------------------
+
+        port = str(
+            row.get("Port", "")
+        ).strip()
+
+        if not port:
+            port = extracted_port
+
+        port = _norm_port(port)
+
+        # -----------------------------------------
+        # CVE EXTRACTION
+        # -----------------------------------------
+
+        raw_cve = str(
+            row.get("CVE", "")
+        ).strip()
+
+        cves = [
+            _norm(cve)
+            for cve in re.split(
+                r"[;,]",
+                raw_cve,
+            )
+            if str(cve).strip()
+        ]
+
+        if not cves:
+
+            scanner_id = str(
+                row.get(
+                    "Scanner ID",
+                    row.get(
+                        "Plugin ID",
+                        "",
+                    ),
+                )
+            )
+
+            cves = re.findall(
+                r"\d+",
+                scanner_id,
+            )
+
+        if not hosts:
+            hosts = [""]
+
+        if not cves:
+            cves = [""]
+
+        # -----------------------------------------
+        # CROSS COMBINATION KEYS
+        # -----------------------------------------
+
+        row_keys = []
+
+        for host in hosts:
+
+            for cve in cves:
+
+                key = (
+                    f"{name}|"
+                    f"{host}|"
+                    f"{port}|"
+                    f"{cve}"
+                )
+
+                row_keys.append(key)
+
+        keys.append(row_keys)
+
+    return keys
+
+
+# ---------------------------------------------------------
+# FAST LOOKUP ENGINE
+# ---------------------------------------------------------
+
+class FastVamsEnrichmentEngine:
+
+    def __init__(self):
+
+        self.lookup = {}
+
+    # -----------------------------------------------------
+
+    def build_vams_lookup(
+        self,
+        vams_df: pd.DataFrame,
+    ):
+
+        keys_list = build_fast_keys(vams_df)
+
+        for idx, keys in enumerate(keys_list):
+
+            row = vams_df.iloc[idx]
+
+            for key in keys:
+                self.lookup[key] = row
+
+    # -----------------------------------------------------
+
+    def enrich(
+        self,
+        target_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+
+        out = target_df.copy()
+
+        keys_list = build_fast_keys(out)
+
+        for idx, keys in enumerate(keys_list):
+
+            matched_row = None
+
+            for key in keys:
+
+                matched_row = self.lookup.get(key)
+
+                if matched_row is not None:
+                    break
+
+            if matched_row is None:
+                continue
+
+            for col in VAMS_COLUMNS:
+
+                existing = str(
+                    out.at[idx, col]
+                ).strip()
+
+                incoming = str(
+                    matched_row.get(col, "")
+                ).strip()
+
+                if not incoming:
+                    continue
+
+                out.at[idx, col] = incoming
+
+        return out

@@ -1,0 +1,198 @@
+""" def _write_vams_columns_only(self, path: str, sheet_name: str, df):
+
+        wb = load_workbook(path)
+        ws = wb[sheet_name]
+
+        header_row = 2
+
+        headers = {
+            str(ws.cell(row=header_row, column=c).value).strip(): c
+            for c in range(1, ws.max_column + 1)
+        }
+
+        excel_rows = []
+
+        for row in ws.iter_rows(min_row=3, values_only=True):
+            excel_rows.append(list(row))
+
+        import pandas as pd
+
+        excel_df = pd.DataFrame(excel_rows)
+
+        excel_df.columns = [
+            ws.cell(row=header_row, column=i).value
+            for i in range(1, len(excel_df.columns) + 1)
+        ]
+
+        excel_df = excel_df.fillna("").astype(str)
+
+        # Build keys for workbook rows
+        excel_df["_KEY_"] = (
+            excel_df["Name"].str.strip().str.lower()
+            + "|"
+            + excel_df["Host / Image"].str.strip().str.lower()
+            + "|"
+            + excel_df["Port"].str.strip().str.lower()
+            + "|"
+            + excel_df["CVE"].str.strip().str.lower()
+        )
+
+        # Build keys for enriched dataframe
+        df = df.fillna("").astype(str)
+
+        df["_KEY_"] = (
+            df["Name"].str.strip().str.lower()
+            + "|"
+            + df["Host / Image"].str.strip().str.lower()
+            + "|"
+            + df["Port"].str.strip().str.lower()
+            + "|"
+            + df["CVE"].str.strip().str.lower()
+        )
+
+        # Map key → actual Excel row
+        excel_key_to_row = {
+            key: idx + 3
+            for idx, key in enumerate(excel_df["_KEY_"])
+        }
+
+        updated = 0
+
+        for _, row in df.iterrows():
+
+            excel_row = excel_key_to_row.get(row["_KEY_"])
+
+            if not excel_row:
+                continue
+
+            for col_name in VAMS_COLUMNS:
+
+                col_idx = headers.get(col_name)
+
+                if col_idx is None:
+                    continue
+
+                ws.cell(
+                    row=excel_row,
+                    column=col_idx,
+                    value=row.get(col_name, ""),
+                )
+
+            updated += 1
+
+        wb.save(path)
+
+        self.logger.info(
+            "Updated %s rows in %s",
+            updated,
+            sheet_name,
+        )
+
+"""
+
+        """if self.output_sheet.get() not in {"New Data", "Unique Data"}:
+            raise ValueError("Output sheet must be either 'New Data' or 'Unique Data'")
+        """
+"""    def _write_vams_columns_only(self, path: str, sheet_name: str, df):
+        wb = load_workbook(path)
+        ws = wb[sheet_name]
+        header_row = 2
+        header_map = {str(ws.cell(row=header_row, column=c).value).strip(): c for c in range(1, ws.max_column + 1)}
+        for r_idx in range(len(df)):
+            excel_row = r_idx + 3
+            for col_name in VAMS_COLUMNS:
+                col_idx = header_map.get(col_name)
+                if col_idx is None:
+                    continue
+                ws.cell(row=excel_row, column=col_idx, value=df.iloc[r_idx][col_name])
+        wb.save(path)
+"""
+
+
+"""   def run(self):
+        try:
+            self.run_btn.configure(state="disabled")
+
+            self._validate_inputs()
+
+            total_df = self._read_generated_sheet(
+                self.output_file.get(),
+                "Total Data",
+                "New Data",
+            )
+
+            unique_df = self._read_generated_sheet(
+                self.output_file.get(),
+                "Unique Data",
+            )
+
+            if total_df is None:
+                raise ValueError("Could not find Total Data/New Data sheet")
+
+            if unique_df is None:
+                raise ValueError("Could not find Unique Data sheet")
+
+            incoming_vams = parse_scan_file(
+                self.raw_file.get(),
+                self.raw_sheet.get(),
+                self.state["selected_scanner"],
+                require_rows_after_filter=False,
+                apply_severity_filter=False,
+            ).df
+
+            if incoming_vams.empty:
+                self.logger.warning(
+                    "VAMS file contains no rows after normalization"
+                )
+
+                messagebox.showwarning(
+                    "Warning",
+                    "No rows found in VAMS file after normalization",
+                )
+
+                return
+
+            enriched_total_df, enriched_unique_df = (
+                update_vams_existing_workbook(
+                    total_df,
+                    unique_df,
+                    incoming_vams,
+                )
+            )
+
+            self._write_vams_columns_only(
+                self.output_file.get(),
+                "Total Data" if "Total Data" in list_excel_sheets(self.output_file.get()) else "New Data",
+                enriched_total_df,
+            )
+
+            self._write_vams_columns_only(
+                self.output_file.get(),
+                "Unique Data",
+                enriched_unique_df,
+            )
+
+            self._refresh_dashboard_charts(
+                self.output_file.get(),
+                enriched_total_df,
+            )
+
+            output = self.output_file.get()
+
+            self.logger.info(
+                "VAMS data added to workbook: %s",
+                output,
+            )
+
+            messagebox.showinfo(
+                "Success",
+                "VAMS data merged successfully",
+            )
+
+        except Exception as exc:
+            self.logger.exception("Add VAMS Data failed")
+            messagebox.showerror("Error", str(exc))
+
+        finally:
+            self.run_btn.configure(state="normal")
+"""

@@ -1,0 +1,584 @@
+"""Tab 3: merge VAMS data into an existing generated workbook."""
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+from logic.fast_vams_enrichment import FastVamsEnrichmentEngine
+#from logic.comparison_logic import update_vams_existing_workbook
+#from logic.excel_writer import read_sheet_as_df, write_output
+from logic.excel_writer import read_sheet_as_df
+from logic.excel_writer import read_sheet_as_df, write_summary_sheet
+from logic.parser import parse_scan_file
+from logic.vams_enrichment import VAMS_COLUMNS
+
+from logic.excel_writer.three_uk_qualys import (
+    build_3uk_vams_matching_df,
+)
+from utils.file_handler import list_excel_sheets, validate_file
+from openpyxl import load_workbook
+
+TOTAL_SHEET_CANDIDATES = (
+    "Total Vulnerabilities",
+    "Total vulnerabilities",
+    "Total Data",
+    "New Data",
+    "Total Vulnerability",
+)
+
+UNIQUE_SHEET_CANDIDATES = (
+    "Unique Vulnerabilities",
+    "Unique Data",
+)
+
+class AddVamsDataTab(ttk.Frame):
+    # This tab is dedicated to taking an existing output workbook and
+    # merging a raw VAMS file into its "New Data" and "Unique Data" sheets.
+    def __init__(self, master, app_state, logger):
+        super().__init__(master)
+        self.state = app_state
+        self.logger = logger
+
+        self.output_file = tk.StringVar()
+#        self.output_sheet = tk.StringVar(value="New Data")
+        self.raw_file = tk.StringVar()
+        self.raw_sheet = tk.StringVar()
+
+        self._build()
+
+    def _build(self):
+        ttk.Label(self, text="Output file").grid(row=0, column=0, sticky="w", padx=6, pady=6)
+        ttk.Entry(self, textvariable=self.output_file, width=72).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
+        ttk.Button(self, text="Browse", command=self._browse_output).grid(row=0, column=2, padx=6, pady=6)
+
+#        ttk.Label(self, text="Output sheet selector").grid(row=1, column=0, sticky="w", padx=6, pady=6)
+#        self.output_sheet_combo = ttk.Combobox(
+#            self,
+#            textvariable=self.output_sheet,
+#            #values=["New Data", "Old Data", "Unique Data", "Summary Data"],
+#            values=["Total Data", "New Data", "Unique Data"],
+#            state="readonly",
+#            width=35,
+#        )
+#        self.output_sheet_combo.grid(row=1, column=1, sticky="w", padx=6, pady=6)
+
+        ttk.Label(self, text="Raw VAMS file").grid(row=2, column=0, sticky="w", padx=6, pady=6)
+        ttk.Entry(self, textvariable=self.raw_file, width=72).grid(row=2, column=1, sticky="ew", padx=6, pady=6)
+        ttk.Button(self, text="Browse", command=self._browse_raw).grid(row=2, column=2, padx=6, pady=6)
+
+        ttk.Label(self, text="Raw VAMS sheet").grid(row=3, column=0, sticky="w", padx=6, pady=6)
+        self.raw_sheet_combo = ttk.Combobox(self, textvariable=self.raw_sheet, state="readonly", width=35)
+        self.raw_sheet_combo.grid(row=3, column=1, sticky="w", padx=6, pady=6)
+
+        self.run_btn = ttk.Button(self, text="Run", command=self.run)
+#        self.run_btn.grid(row=4, column=1, sticky="e", padx=6, pady=10)
+#        self.columnconfigure(1, weight=1)
+
+        self.run_btn.grid(row=3, column=1, sticky="e", padx=6, pady=10)
+        self.columnconfigure(1, weight=1)
+
+
+    def _browse_output(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx")])
+        if not path:
+            return
+        self.output_file.set(path)
+        sheets = list_excel_sheets(path)
+        self.output_sheet_combo["values"] = sheets
+        if sheets:
+            self.output_sheet.set(sheets[0])
+
+    def _browse_raw(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx *.xls *.xlsm")])
+        if not path:
+            return
+        self.raw_file.set(path)
+        sheets = list_excel_sheets(path)
+        self.raw_sheet_combo["values"] = sheets
+        self.raw_sheet.set(sheets[0])
+
+    def _validate_inputs(self):
+        validate_file(self.output_file.get())
+        validate_file(self.raw_file.get())
+        if not self.raw_sheet.get():
+            raise ValueError("Please select raw VAMS sheet")
+        
+#        if self.output_sheet.get() not in {"Total Data", "New Data", "Unique Data"}:
+#            raise ValueError("Output sheet must be 'Total Data', 'New Data', or 'Unique Data'")
+        
+    
+    def _write_vams_columns_only(
+        self,
+        path: str,
+        sheet_name: str,
+        enriched_df,
+    ):
+    
+        from openpyxl import load_workbook
+        import pandas as pd
+    
+        self.logger.info(
+            "Opening workbook for VAMS writeback: %s",
+            sheet_name,
+        )
+    
+        wb = load_workbook(path)
+    
+        ws = wb[sheet_name]
+    
+        header_row = 2
+        data_start_row = 3
+    
+        # ---------------------------------------------------
+        # READ HEADERS
+        # ---------------------------------------------------
+    
+        headers = {}
+    
+        for col_idx in range(1, ws.max_column + 1):
+        
+            header_value = ws.cell(
+                row=header_row,
+                column=col_idx,
+            ).value
+    
+            if header_value is None:
+                continue
+            
+            headers[str(header_value).strip()] = col_idx
+    
+        required_columns = [
+            "Name",
+            "Host / Image",
+            "Port",
+            "CVE",
+        ]
+    
+        for col in required_columns:
+        
+            if col not in headers:
+            
+                self.logger.error(
+                    "Missing required column in Excel sheet: %s",
+                    col,
+                )
+    
+                return
+    
+        # ---------------------------------------------------
+        # BUILD EXCEL LOOKUP
+        # ---------------------------------------------------
+    
+        excel_lookup = {}
+    
+        for excel_row in range(
+            data_start_row,
+            ws.max_row + 1,
+        ):
+    
+            try:
+            
+                name = str(
+                    ws.cell(
+                        excel_row,
+                        headers["Name"],
+                    ).value or ""
+                ).strip().lower()
+    
+                host_column = None
+
+                for possible in [
+                    "Host / Image",
+                    "Host",
+                    "IP",
+                ]:
+                
+                    if possible in headers:
+                        host_column = headers[possible]
+                        break
+                    
+                host = ""
+                
+                if host_column is not None:
+                
+                    host = str(
+                        ws.cell(
+                            excel_row,
+                            host_column,
+                        ).value or ""
+                    ).strip().lower()
+                    
+                port = str(
+                    ws.cell(
+                        excel_row,
+                        headers["Port"],
+                    ).value or ""
+                ).strip().lower()
+    
+                cve = str(
+                    ws.cell(
+                        excel_row,
+                        headers["CVE"],
+                    ).value or ""
+                ).strip().lower()
+    
+                key = (
+                    f"{name}|"
+                    f"{host}|"
+                    f"{port}|"
+                    f"{cve}"
+                )
+    
+                excel_lookup[key] = excel_row
+    
+            except Exception:
+                continue
+            
+        # ---------------------------------------------------
+        # ENRICHED DF NORMALIZATION
+        # ---------------------------------------------------
+    
+        df = enriched_df.fillna("").astype(str).copy()
+    
+        updated = 0
+    
+        # ---------------------------------------------------
+        # WRITE VAMS VALUES
+        # ---------------------------------------------------
+    
+        for _, row in df.iterrows():
+        
+            try:
+            
+                name = str(
+                    row.get("Name", "")
+                ).strip().lower()
+    
+                host = str(
+                    row.get(
+                        "Host / Image",
+                        row.get(
+                            "Host",
+                            row.get(
+                                "IP",
+                                "",
+                            ),
+                        ),
+                    )
+                ).strip().lower()
+    
+                port = str(
+                    row.get("Port", "")
+                ).strip().lower()
+    
+                cve = str(
+                    row.get("CVE", "")
+                ).strip().lower()
+    
+                key = (
+                    f"{name}|"
+                    f"{host}|"
+                    f"{port}|"
+                    f"{cve}"
+                )
+    
+                excel_row = excel_lookup.get(key)
+    
+                if not excel_row:
+                    continue
+                
+                row_updated = False
+    
+                for col_name in VAMS_COLUMNS:
+                
+                    col_idx = headers.get(col_name)
+    
+                    if col_idx is None:
+                        continue
+                    
+                    value = str(
+                        row.get(col_name, "")
+                    ).strip()
+    
+                    if not value:
+                        continue
+                    
+                    ws.cell(
+                        row=excel_row,
+                        column=col_idx,
+                        value=value,
+                    )
+    
+                    row_updated = True
+    
+                if row_updated:
+                    updated += 1
+    
+            except Exception:
+                continue
+            
+        # ---------------------------------------------------
+        # SAVE WORKBOOK
+        # ---------------------------------------------------
+    
+        self.logger.info(
+            "Saving workbook after VAMS enrichment..."
+        )
+
+        from logic.excel_writer.formatting import (
+            apply_table_formatting,
+        )
+        
+        apply_table_formatting(ws)
+            
+        wb.save(path)
+    
+        wb.close()
+    
+        self.logger.info(
+            "Updated %s rows in %s",
+            updated,
+            sheet_name,
+        )    
+   
+
+    def _read_generated_sheet(self, path: str, *sheet_names: str):
+        for sheet_name in sheet_names:
+            try:
+                return read_sheet_as_df(path, sheet_name)
+            except ValueError:
+                continue
+        return None
+
+    def _refresh_dashboard_charts(self, path: str, vams_chart_df):
+        total_df = self._read_generated_sheet(path, *TOTAL_SHEET_CANDIDATES)
+        unique_df = self._read_generated_sheet(path, *UNIQUE_SHEET_CANDIDATES)
+        if total_df is None or unique_df is None:
+            self.logger.warning("Dashboard charts were not refreshed because required data sheets were not found")
+            return
+
+        wb = load_workbook(path)
+        if "Dashboard" in wb.sheetnames:
+            ws = wb["Dashboard"]
+        elif "Summary Data" in wb.sheetnames:
+            ws = wb["Summary Data"]
+            ws.title = "Dashboard"
+        else:
+            ws = wb.create_sheet("Dashboard", 0)
+
+        write_summary_sheet(
+            ws,
+            total_df,
+            total_df.iloc[0:0],
+            unique_df,
+            self.state["selected_project"],
+            self.state["selected_scanner"],
+            include_old_summary=False,
+            include_vams_charts=True,
+            vams_chart_df=vams_chart_df,
+        )
+        wb.save(path)
+
+
+    def run(self):
+
+        try:
+
+            self.run_btn.configure(
+                state="disabled"
+            )
+
+            self._validate_inputs()
+
+            self.logger.info(
+                "Loading workbook sheets..."
+            )
+
+            total_df = self._read_generated_sheet(
+                self.output_file.get(),
+                "Total Data",
+                "total Vulnerabilities",
+                "total vulnerability",
+                "New Data",
+                *TOTAL_SHEET_CANDIDATES,
+            )
+
+            unique_df = self._read_generated_sheet(
+                self.output_file.get(),
+                "Unique Data",
+                "unique vulnerabilities",
+                *UNIQUE_SHEET_CANDIDATES,
+            )
+
+            if total_df is None:
+                raise ValueError(
+                    "Could not find Total Vulnerabilities sheet"
+                )
+
+            if unique_df is None:
+                raise ValueError(
+                    "Could not find Unique Vulnerabilities sheet"
+                )
+
+            self.logger.info(
+                "Parsing incoming VAMS file..."
+            )
+
+            incoming_vams = parse_scan_file(
+                self.raw_file.get(),
+                self.raw_sheet.get(),
+                self.state["selected_project"],
+                self.state["selected_scanner"],
+                require_rows_after_filter=False,
+                apply_severity_filter=False,
+            ).df
+
+            if incoming_vams.empty:
+
+                self.logger.warning(
+                    "VAMS file contains no rows after normalization"
+                )
+
+                messagebox.showwarning(
+                    "Warning",
+                    "No rows found in VAMS file after normalization",
+                )
+
+                return
+
+            # -------------------------------------------------
+            # 3UK + QUALYS MATCHING ADAPTER
+            # -------------------------------------------------
+
+            if (
+
+                self.state["selected_project"]
+                .strip()
+                .casefold()
+                == "3uk"
+
+                and
+
+                self.state["selected_scanner"]
+                .strip()
+                .casefold()
+                == "qualys"
+            ):
+
+                matching_total_df = (
+                    build_3uk_vams_matching_df(
+                        total_df
+                    )
+                )
+
+            else:
+
+                matching_total_df = total_df
+
+            self.logger.info(
+                "Initializing fast VAMS enrichment engine..."
+            )
+
+            engine = FastVamsEnrichmentEngine()
+
+            self.logger.info(
+                "Building VAMS lookup index..."
+            )
+
+            engine.build_vams_lookup(
+                incoming_vams
+            )
+
+            self.logger.info(
+                "Enriching Total Vulnerabilities sheet..."
+            )
+
+            enriched_total_df = engine.enrich(
+                matching_total_df
+            )
+
+            self.logger.info(
+                "Enriching Unique Vulnerabilities sheet..."
+            )
+
+            enriched_unique_df = engine.enrich(
+                unique_df
+            )
+
+            available_sheets = list_excel_sheets(self.output_file.get())
+            target_total_sheet = next(
+                (
+                    sheet_name
+                    for sheet_name in TOTAL_SHEET_CANDIDATES
+                    if sheet_name in available_sheets
+                ),
+                "Total Vulnerabilities",
+            )
+            target_unique_sheet = next(
+                (
+                    sheet_name
+                    for sheet_name in UNIQUE_SHEET_CANDIDATES
+                    if sheet_name in available_sheets
+                ),
+                "Unique Vulnerabilities",
+            )
+
+            self.logger.info(
+                "Writing enriched Total Vulnerabilities sheet..."
+            )
+
+            self._write_vams_columns_only(
+                self.output_file.get(),
+                target_total_sheet,
+                enriched_total_df,
+            )
+
+            self.logger.info(
+                "Writing enriched Unique Vulnerabilities sheet..."
+            )
+
+            self._write_vams_columns_only(
+                self.output_file.get(),
+                target_unique_sheet,
+                enriched_unique_df,
+            )
+
+            self.logger.info(
+                "Refreshing dashboard charts..."
+            )
+
+            self._refresh_dashboard_charts(
+                self.output_file.get(),
+                enriched_total_df,
+            )
+
+            output = self.output_file.get()
+
+            self.logger.info(
+                "VAMS data added successfully: %s",
+                output,
+            )
+
+            messagebox.showinfo(
+                "Success",
+                "VAMS data merged successfully",
+            )
+
+        except Exception as exc:
+
+            self.logger.exception(
+                "Add VAMS Data failed"
+            )
+
+            messagebox.showerror(
+                "Error",
+                str(exc),
+            )
+
+        finally:
+
+            self.run_btn.configure(
+                state="normal"
+            )   
+
+
+
+

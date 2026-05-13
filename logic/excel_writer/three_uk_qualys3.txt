@@ -1,0 +1,655 @@
+"""3UK + Qualys-specific Total Vulnerability sheet mapping."""
+
+from __future__ import annotations
+
+import re
+import pandas as pd
+
+
+from logic.parser import (
+    TEMPLATE_COLUMNS,
+)
+
+from logic.parser import (
+    merge_semicolon,
+)
+
+THREE_UK_PROJECT = "3uk"
+
+QUALYS_SCANNER = "qualys"
+
+
+THREE_UK_QUALYS_TOTAL_SHEET_NAMES = {
+    "total data",
+    "total vulnerability",
+    "total vulnerability sheet",
+    "total_vulnerability_sheet",
+    "total vulnerabilities",
+}
+
+
+THREE_UK_QUALYS_TOTAL_COLUMNS = [
+    "IP",
+    "Network",
+    "DNS",
+    "NetBIOS",
+    "Tracking Method",
+    "OS",
+    "IP Status",
+    "QID",
+    "Title",
+    "Vuln Status",
+    "Type",
+    "Severity",
+    "Port",
+    "Protocol",
+    "FQDN",
+    "SSL",
+    "First Detected",
+    "Last Detected",
+    "Times Detected",
+    "Date Last Fixed",
+    "CVE ID",
+    "Vendor Reference",
+    "Bugtraq ID",
+    "CVSS",
+    "Criticality",
+    "CVSS Base",
+    "CVSS Temporal",
+    "Product",
+    "CVSS Environment",
+    "CVSS3",
+    "CVSS3 Base",
+    "CVSS3 Temporal",
+    "Threat",
+    "Impact",
+    "Solution",
+    "Exploitability",
+    "Associated Malware",
+    "Results",
+    "PCI Vuln",
+    "Ticket State",
+    "Instance",
+    "Category",
+]
+
+
+REQUIRED_COLUMNS = [
+    "Title",
+    "IP",
+    "QID",
+    "CVE ID",
+]
+
+
+QUALYS_REQUIRED_HEADERS = [
+    "IP",
+    "Network",
+    "DNS",
+    "NetBIOS",
+    "Tracking Method",
+    "OS",
+    "IP Status",
+    "QID",
+    "Title",
+    "Vuln Status",
+    "Type",
+    "Severity",
+    "Port",
+    "Protocol",
+    "FQDN",
+    "SSL",
+    "First Detected",
+    "Last Detected",
+    "Times Detected",
+    "Date Last Fixed",
+    "CVE ID",
+    "Vendor Reference",
+    "Bugtraq ID",
+    "CVSS",
+    "CVSS Base",
+    "CVSS Temporal",
+    "CVSS Environment",
+    "CVSS3.1",
+    "CVSS3.1 Base",
+    "CVSS3.1 Temporal",
+    "Threat",
+    "Impact",
+    "Solution",
+    "Exploitability",
+    "Associated Malware",
+    "Results",
+    "PCI Vuln",
+    "Ticket State",
+    "Instance",
+    "Category",
+]
+
+
+CRITICALITY_COLORS = {
+    "CRITICAL": "009B0F06",
+    "HIGH": "00D53E0F",
+    "MEDIUM": "00F77F00",
+    "LOW": "00FCBF49",
+}
+
+
+def normalized_name(
+    value: object,
+) -> str:
+
+    return " ".join(
+        str(value)
+        .strip()
+        .lower()
+        .replace("_", " ")
+        .split()
+    )
+
+def is_three_uk_qualys_project(
+    project: str,
+    scanner: str,
+) -> bool:
+
+    return (
+        str(project).strip().casefold() == THREE_UK_PROJECT
+        and str(scanner).strip().casefold() == QUALYS_SCANNER
+    )
+
+def column_values(
+    df: pd.DataFrame,
+    column: object,
+) -> pd.Series:
+
+    values = df.loc[:, column]
+
+    if isinstance(values, pd.Series):
+
+        return (
+            values
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+    result = pd.Series(
+        [""] * len(df),
+        index=df.index,
+        dtype="object",
+    )
+
+    for position in range(values.shape[1]):
+
+        series = (
+            values.iloc[:, position]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+        empty_rows = result.eq("")
+
+        result.loc[empty_rows] = (
+            series.loc[empty_rows]
+        )
+
+    return result
+
+
+
+def fill_empty_values(
+    result: pd.Series,
+    values: pd.Series,
+) -> pd.Series:
+
+    empty_rows = (
+        result.eq("")
+        & values.ne("")
+    )
+
+    result.loc[empty_rows] = (
+        values.loc[empty_rows]
+    )
+
+    return result
+
+
+def severity_to_criticality(
+    value: object,
+) -> str:
+
+    if pd.isna(value):
+        return ""
+
+    text = str(value).strip()
+
+    if not text:
+        return ""
+
+    match = re.search(
+        r"\d+(?:\.\d+)?",
+        text,
+    )
+
+    if not match:
+        return ""
+
+    try:
+
+        severity = float(match.group(0))
+
+    except ValueError:
+
+        return ""
+
+    if severity <= 4.0:
+        return "LOW"
+
+    if 4.1 <= severity <= 7.0:
+        return "MEDIUM"
+
+    if 7.1 <= severity <= 8.5:
+        return "HIGH"
+
+    if 8.5 < severity <= 10.0:
+        return "CRITICAL"
+
+    return ""
+
+
+def criticality_series(
+    df: pd.DataFrame,
+) -> pd.Series:
+
+    if "Severity" not in df.columns:
+
+        return pd.Series(
+            [""] * len(df),
+            index=df.index,
+            dtype="object",
+        )
+
+    severity_series = (
+        df["Severity"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    return severity_series.apply(
+        severity_to_criticality
+    )
+
+def is_three_uk_qualys_total_sheet(
+    project: str,
+    scanner: str,
+    sheet_name: str,
+) -> bool:
+
+    return (
+        str(project).strip().casefold()
+        == THREE_UK_PROJECT
+        and str(scanner).strip().casefold()
+        == QUALYS_SCANNER
+        and str(sheet_name).strip().casefold()
+        in THREE_UK_QUALYS_TOTAL_SHEET_NAMES
+    )
+
+def detect_qualys_header_row(
+    path: str,
+    sheet_name: str,
+) -> int:
+
+    preview = pd.read_excel(
+        path,
+        sheet_name=sheet_name,
+        header=None,
+        nrows=15,
+    )
+
+    required_headers = {
+        "ip",
+        "network",
+        "dns",
+        "netbios",
+        "tracking method",
+        "os",
+        "ip status",
+        "qid",
+        "title",
+        "vuln status",
+        "type",
+        "severity",
+        "port",
+        "protocol",
+        "fqdn",
+        "ssl",
+        "first detected",
+        "last detected",
+        "times detected",
+        "date last fixed",
+        "cve id",
+        "vendor reference",
+        "bugtraq id",
+        "cvss",
+        "cvss base",
+        "cvss temporal",
+        "cvss environment",
+        "cvss3.1",
+        "cvss3.1 base",
+        "cvss3.1 temporal",
+        "threat",
+        "impact",
+        "solution",
+        "exploitability",
+        "associated malware",
+        "results",
+        "pci vuln",
+        "ticket state",
+        "instance",
+        "category",
+    }
+
+    best_row = 0
+    best_score = 0
+
+    for idx, row in preview.iterrows():
+
+        headers = {
+            str(v).strip().lower()
+            for v in row.tolist()
+            if pd.notna(v)
+        }
+
+        score = len(
+            required_headers.intersection(
+                headers
+            )
+        )
+
+        if score > best_score:
+
+            best_score = score
+            best_row = idx
+
+    return best_row
+
+def map_risk(value):
+
+    text_mapping = {
+
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "critical": "Critical",
+    }
+
+    normalized = (
+        str(value)
+        .strip()
+        .lower()
+    )
+
+    if normalized in text_mapping:
+
+        return text_mapping[
+            normalized
+        ]
+
+    try:
+
+        score = float(value)
+
+        if score <= 4.0:
+            return "Low"
+
+        elif score <= 6.0:
+            return "Medium"
+
+        elif score <= 8.0:
+            return "High"
+
+        return "Critical"
+
+    except:
+
+        return "Unknown"
+    
+    
+def three_uk_qualys_total_view(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+
+    out = df.copy()
+
+    out["Criticality"] = criticality_series(out)
+
+    if "Product" not in out.columns:
+
+        out["Product"] = ""
+
+    rename_map = {
+        "CVSS3.1": "CVSS3",
+        "CVSS3.1 Base": "CVSS3 Base",
+        "CVSS3.1 Temporal": "CVSS3 Temporal",
+    }
+
+    out = out.rename(columns=rename_map)
+
+    for col in THREE_UK_QUALYS_TOTAL_COLUMNS:
+
+        if col not in out.columns:
+
+            out[col] = ""
+
+    out = out[
+        THREE_UK_QUALYS_TOTAL_COLUMNS
+    ]
+
+    return out.reset_index(drop=True)
+
+def build_3uk_qualys_total_sheet_df(
+    path: str,
+    sheet_name: str,
+) -> pd.DataFrame:
+
+    header_row = detect_qualys_header_row(
+        path,
+        sheet_name,
+    )
+
+    df = pd.read_excel(
+        path,
+        sheet_name=sheet_name,
+        header=header_row,
+    ).fillna("")
+
+    df.columns = (
+        df.columns
+        .astype(str)
+        .str.strip()
+    )
+
+    return three_uk_qualys_total_view(df)
+
+def build_3uk_qualys_unique_sheet_df(
+    path: str,
+    sheet_name: str,
+) -> pd.DataFrame:
+
+    header_row = detect_qualys_header_row(
+        path,
+        sheet_name,
+    )
+
+    df = pd.read_excel(
+        path,
+        sheet_name=sheet_name,
+        header=header_row,
+    ).fillna("")
+
+    df.columns = (
+    df.columns
+    .astype(str)
+    .str.strip()
+)
+
+    total_df = three_uk_qualys_total_view(
+        df
+    )
+
+    column_mapping = {
+
+        "QID": "Scanner ID",
+        "CVE ID": "CVE",
+
+        "CVSS Base": "CVSS v2.0 Base Score",
+        "CVSS": "CVSS v2.0 Base Score",
+
+        "IP": "Host / Image",
+        "FQDN": "Host / Image",
+
+        "Protocol": "Protocol",
+        "Port": "Port",
+
+        "Title": "Name",
+
+        "Threat": "Synopsis",
+        "Impact": "Description",
+
+        "Solution": "Solution",
+
+        "Vendor Reference": "See Also",
+        "Bugtraq ID": "See Also",
+
+        "Results": "Plugin Output",
+
+        "CVSS3": "CVSS v3.0 Base Score",
+        "CVSS3 Base": "CVSS v3.0 Base Score",
+
+        "CVSS3 Temporal": "CVSS v3.0 Temporal Score",
+    }
+
+    out = pd.DataFrame()
+
+    for source_col, target_col in column_mapping.items():
+
+        if source_col not in total_df.columns:
+            continue
+
+        incoming = (
+            total_df[source_col]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+        if target_col not in out.columns:
+
+            out[target_col] = incoming
+
+        else:
+
+            existing = (
+                out[target_col]
+                .fillna("")
+                .astype(str)
+            )
+
+            out[target_col] = existing.where(
+                existing != "",
+                incoming,
+            )
+
+    if "Criticality" in total_df.columns:
+
+        out["Risk"] = (
+            total_df["Criticality"]
+            .apply(map_risk)
+        )
+
+    elif "Severity" in total_df.columns:
+
+        out["Risk"] = (
+            total_df["Severity"]
+            .apply(map_risk)
+        )
+
+    for col in TEMPLATE_COLUMNS:
+
+        if col not in out.columns:
+
+            out[col] = ""
+
+    out = out[
+        TEMPLATE_COLUMNS
+    ].fillna("")
+
+    out = out.astype(str)
+
+    priority = {
+        "Critical": 4,
+        "High": 3,
+        "Medium": 2,
+        "Low": 1,
+    }
+
+    def merge_unique(series):
+
+        seen = set()
+
+        result = []
+
+        for value in series:
+
+            value = str(value).strip()
+
+            if not value:
+                continue
+
+            lowered = value.lower()
+
+            if lowered not in seen:
+
+                seen.add(lowered)
+
+                result.append(value)
+
+        return "; ".join(result)
+
+    aggregation = {}
+
+    for col in TEMPLATE_COLUMNS:
+
+        if col == "Risk":
+
+            aggregation[col] = lambda s: max(
+                (
+                    str(v).strip()
+                    for v in s
+                ),
+                key=lambda r: priority.get(r, 0),
+                default="Low",
+            )
+
+        else:
+
+            aggregation[col] = merge_unique
+
+    group_cols = [
+        "Name",
+        "Host / Image",
+        "Scanner ID",
+        "CVE",
+    ]
+
+    return (
+        out
+        .groupby(
+            group_cols,
+            dropna=False,
+            sort=False,
+        )
+        .agg(aggregation)
+        .reset_index(drop=True)
+    )

@@ -1,0 +1,302 @@
+"""Tab 2: Update tracking sheet using optional master + optional VAMS enrichment."""
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from logic.comparison_logic import aggregate_unique, classify_new_old, enrich_with_vams
+from logic.excel_writer import write_output
+from logic.excel_writer.formatting import (apply_table_formatting,)
+from logic.parser import parse_scan_file
+from logic.excel_writer.three_uk_qualys import (
+    build_3uk_qualys_total_sheet_df,
+    build_3uk_qualys_unique_sheet_df,
+)
+from utils.file_handler import list_excel_sheets, validate_file
+
+
+class GenerateTrackingTab(ttk.Frame):
+    """Core workflow: parse -> compare -> aggregate -> optional VAMS -> write output."""
+    def __init__(self, master, app_state, logger):
+        super().__init__(master)
+        self.state = app_state
+        self.logger = logger
+
+        self.master_file = tk.StringVar()
+        self.master_sheet = tk.StringVar()
+        self.raw_file = tk.StringVar()
+        self.raw_sheet = tk.StringVar()
+        self.vams_file = tk.StringVar()
+        self.vams_sheet = tk.StringVar()
+        self.output_file = tk.StringVar()
+
+
+        self._build_ui()
+
+    def _build_ui(self):
+        self._file_row(0, "Master File (optional)", self.master_file, self._browse_master)
+        ttk.Label(self, text="Master sheet").grid(row=1, column=0, sticky="w", padx=6, pady=6)
+        self.master_combo = ttk.Combobox(self, textvariable=self.master_sheet, state="readonly", width=35)
+        self.master_combo.grid(row=1, column=1, sticky="w", padx=6, pady=6)
+
+        self._file_row(2, "Raw File", self.raw_file, self._browse_raw)
+        ttk.Label(self, text="Raw sheet").grid(row=3, column=0, sticky="w", padx=6, pady=6)
+        self.raw_combo = ttk.Combobox(self, textvariable=self.raw_sheet, state="readonly", width=35)
+        self.raw_combo.grid(row=3, column=1, sticky="w", padx=6, pady=6)
+
+        self._file_row(4, "VAMS File (optional)", self.vams_file, self._browse_vams)
+        ttk.Label(self, text="VAMS sheet").grid(row=5, column=0, sticky="w", padx=6, pady=6)
+        self.vams_combo = ttk.Combobox(self, textvariable=self.vams_sheet, state="readonly", width=35)
+        self.vams_combo.grid(row=5, column=1, sticky="w", padx=6, pady=6)
+
+        self._file_row(6, "Output File", self.output_file, self._browse_output, save=True)
+
+
+        self.run_btn = ttk.Button(self, text="Run", command=self.run)
+        self.run_btn.grid(row=7, column=1, sticky="e", padx=6, pady=10)
+        self.columnconfigure(1, weight=1)
+
+
+    def _file_row(self, row, label, var, browse_command, save=False):
+        ttk.Label(self, text=label).grid(row=row, column=0, sticky="w", padx=6, pady=6)
+        ttk.Entry(self, textvariable=var, width=72).grid(row=row, column=1, sticky="ew", padx=6, pady=6)
+        ttk.Button(self, text="Browse", command=browse_command).grid(row=row, column=2, padx=6, pady=6)
+
+    def _load_sheets(self, path, combo, var):
+        sheets = list_excel_sheets(path)
+        combo["values"] = sheets
+        if sheets:
+            var.set(sheets[0])
+
+    def _browse_master(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx *.xls *.xlsm")])
+        if path:
+            self.master_file.set(path)
+            self._load_sheets(path, self.master_combo, self.master_sheet)
+
+    def _browse_raw(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx *.xls *.xlsm")])
+        if path:
+            self.raw_file.set(path)
+            self._load_sheets(path, self.raw_combo, self.raw_sheet)
+
+    def _browse_vams(self):
+        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx *.xls *.xlsm")])
+        if path:
+            self.vams_file.set(path)
+            self._load_sheets(path, self.vams_combo, self.vams_sheet)
+
+    def _browse_output(self):
+        path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")])
+        if path:
+            self.output_file.set(path)
+
+    def _validate_inputs(self):
+        validate_file(self.raw_file.get())
+        if not self.raw_sheet.get():
+            raise ValueError("Please select raw sheet")
+        if self.master_file.get():
+            validate_file(self.master_file.get())
+            if not self.master_sheet.get():
+                raise ValueError("Please select master sheet")
+        if self.vams_file.get():
+            validate_file(self.vams_file.get())
+            if not self.vams_sheet.get():
+                raise ValueError("Please select VAMS sheet")
+        if not self.output_file.get():
+            raise ValueError("Please select output file")
+
+    def _parse_with_optional_severity_fallback(self, path: str, sheet: str, label: str):
+        try:
+            return parse_scan_file(path, sheet, self.state["selected_project"], self.state["selected_scanner"]).df
+        except ValueError as exc:
+            if "No rows left after severity filtering" not in str(exc):
+                raise
+            self.logger.warning(
+                "%s has no rows after severity filtering; retrying without severity filter",
+                label,
+            )
+            return parse_scan_file(
+                path,
+                sheet,
+                self.state["selected_project"],
+                self.state["selected_scanner"],
+                require_rows_after_filter=False,
+                apply_severity_filter=False,
+            ).df
+
+
+    def run(self):
+
+        try:
+        
+            self.run_btn.configure(
+                state="disabled"
+            )
+    
+            self._validate_inputs()
+    
+            # -------------------------------------------------
+            # PARSE RAW FILE
+            # -------------------------------------------------
+    
+            if (
+                self.state["selected_project"].strip().casefold() == "3uk"
+                and self.state["selected_scanner"].strip().casefold() == "qualys"
+            ):
+
+                raw_df = build_3uk_qualys_total_sheet_df(
+                    self.raw_file.get(),
+                    self.raw_sheet.get(),
+                )
+
+            else:
+            
+                raw_df = self._parse_with_optional_severity_fallback(
+                    self.raw_file.get(),
+                    self.raw_sheet.get(),
+                    "Raw file",
+                )
+    
+            # -------------------------------------------------
+            # PARSE MASTER FILE
+            # -------------------------------------------------
+    
+            master_df = None
+
+            if self.master_file.get():
+            
+                if (
+                    self.state["selected_project"].strip().casefold() == "3uk"
+                    and self.state["selected_scanner"].strip().casefold() == "qualys"
+                ):
+
+                    master_df = build_3uk_qualys_total_sheet_df(
+                        self.master_file.get(),
+                        self.master_sheet.get(),
+                    )
+
+                else:
+                
+                    master_df = self._parse_with_optional_severity_fallback(
+                        self.master_file.get(),
+                        self.master_sheet.get(),
+                        "Master file",
+                    )
+            # -------------------------------------------------
+            # CLASSIFICATION
+            # -------------------------------------------------
+    
+            new_df, old_df = classify_new_old(
+                raw_df,
+                master_df,
+            )
+    
+            if (
+                self.state["selected_project"].strip().casefold() == "3uk"
+                and self.state["selected_scanner"].strip().casefold() == "qualys"
+            ):
+            
+                unique_df = build_3uk_qualys_unique_sheet_df(
+                    self.raw_file.get(),
+                    self.raw_sheet.get(),
+                )
+            
+            else:
+            
+                unique_df = aggregate_unique(raw_df)
+                    
+    
+            # -------------------------------------------------
+            # OPTIONAL VAMS ENRICHMENT
+            # -------------------------------------------------
+    
+            if self.vams_file.get():
+            
+                vams_df = parse_scan_file(
+                    self.vams_file.get(),
+                    self.vams_sheet.get(),
+                    self.state["selected_project"],
+                    self.state["selected_scanner"],
+                    require_rows_after_filter=False,
+                    apply_severity_filter=False,
+                ).df
+    
+                if vams_df.empty:
+                
+                    self.logger.warning(
+                        "VAMS file contains no rows after normalization; skipping VAMS merge"
+                    )
+    
+                else:
+                
+                    new_df, unique_df = enrich_with_vams(
+                        new_df,
+                        unique_df,
+                        vams_df,
+                    )
+    
+            # -------------------------------------------------
+            # WRITE OUTPUT
+            # -------------------------------------------------
+    
+            output = write_output(
+                self.output_file.get(),
+                new_df,
+                old_df,
+                unique_df,
+                self.state["selected_project"],
+
+                self.state["selected_scanner"],
+            )
+    
+            # -------------------------------------------------
+            # APPLY PROFESSIONAL FORMATTING
+            # -------------------------------------------------
+    
+            from openpyxl import load_workbook
+    
+            from logic.excel_writer.formatting import (
+                apply_table_formatting,
+            )
+    
+            wb = load_workbook(output)
+    
+            for ws in wb.worksheets:
+            
+                apply_table_formatting(ws)
+    
+            wb.save(output)
+    
+            wb.close()
+    
+            # -------------------------------------------------
+            # SUCCESS LOGGING
+            # -------------------------------------------------
+    
+            self.logger.info(
+                "Tracking sheet created: %s",
+                output,
+            )
+    
+            messagebox.showinfo(
+                "Success",
+                f"Tracking sheet created:\n{output}",
+            )
+    
+        except Exception as exc:
+        
+            self.logger.exception(
+                "Update Tracking Sheet failed"
+            )
+    
+            messagebox.showerror(
+                "Error",
+                str(exc),
+            )
+    
+        finally:
+        
+            self.run_btn.configure(
+                state="normal"
+            )
+    

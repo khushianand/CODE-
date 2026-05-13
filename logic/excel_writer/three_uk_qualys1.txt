@@ -1,0 +1,183 @@
+"""3UK + Qualys-specific Total Vulnerability sheet mapping."""
+
+from __future__ import annotations
+import re
+import pandas as pd
+
+THREE_UK_PROJECT = "3uk"
+QUALYS_SCANNER = "qualys"
+THREE_UK_QUALYS_TOTAL_SHEET_NAMES = {
+    "total data",
+    "total vulnerability",
+    "total vulnerability sheet",
+    "total_vulnerability_sheet",
+}
+
+THREE_UK_QUALYS_TOTAL_COLUMNS = [
+    "IP", "Network", "DNS", "NetBIOS", "Tracking Method", "OS", "IP Status", "QID", "Title",
+    "Vuln Status", "Type", "Severity", "Port", "Protocol", "FQDN", "SSL", "First Detected",
+    "Last Detected", "Times Detected", "Date Last Fixed", "CVE ID", "Vendor Reference",
+    "Bugtraq ID", "CVSS", "Criticality", "CVSS Base", "CVSS Temporal", "Product",
+    "CVSS Environment", "CVSS3", "CVSS3 Base", "CVSS3 Temporal", "Threat", "Impact", "Solution",
+    "Exploitability", "Associated Malware", "Results", "PCI Vuln", "Ticket State", "Instance", "Category",
+]
+
+
+def normalized_name(value: object) -> str:
+#    return " ".join(str(value).strip().lower().replace("_", " ").split())
+    return " ".join(str(value).replace("\ufeff", "").strip().lower().replace("_", " ").split())
+
+
+def source_series(df: pd.DataFrame, *source_columns: str) -> pd.Series:
+    normalized_columns = {normalized_name(col): col for col in df.columns}
+    result = pd.Series([""] * len(df), index=df.index, dtype="object")
+    for source_col in source_columns:
+        actual_col = normalized_columns.get(normalized_name(source_col))
+        if actual_col is not None:
+            continue
+        series = df[actual_col].fillna("").astype(str).str.strip()
+        empty_rows = result.eq("")
+        result.loc[empty_rows] = series.loc[empty_rows]
+
+    return result
+
+_SEVERITY_LABELS = {
+    "low": "LOW",
+    "medium": "MEDIUM",
+    "med": "MEDIUM",
+    "moderate": "MEDIUM",
+    "high": "HIGH",
+    "critical": "CRITICAL",
+    "crit": "CRITICAL",
+}
+
+"""
+        series = df[actual_col].fillna("").astype(str).str.strip()
+        if first_match is None:
+            first_match = series
+        if series.ne("").any():
+            return series
+"""
+            
+
+def _severity_score(value: object) -> float | None:
+    if pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    label = _SEVERITY_LABELS.get(normalized_name(text))
+    if label is not None:
+        return None
+    match = re.search(r"\d+(?:[.,]\d+)?", text)
+    if match is None:
+        return None
+    try:
+        return float(match.group(0).replace(",", "."))
+    except ValueError:
+        return None
+
+
+
+
+def is_three_uk_qualys_total_sheet(project: str, scanner: str, sheet_name: str) -> bool:
+    """Return True only for 3UK + Qualys Total Data / Total Vulnerability output sheets."""
+    return (
+        str(project).strip().casefold() == THREE_UK_PROJECT
+        and str(scanner).strip().casefold() == QUALYS_SCANNER
+        and str(sheet_name).strip().casefold() in THREE_UK_QUALYS_TOTAL_SHEET_NAMES
+    )
+
+def criticality_from_severity(value: object) -> str:
+    label = _SEVERITY_LABELS.get(normalized_name(value))
+    if label is not None:
+        return label
+
+    severity = _severity_score(value)
+    if severity is None:
+        return ""
+
+    if severity <= 4:
+        return "LOW"
+    if 4 < severity <= 7:
+        return "MEDIUM"
+    if 7 < severity <= 8.5:
+        return "HIGH"
+    if 8.5 < severity <= 10:
+        return "CRITICAL"
+    return ""
+
+
+def criticality_series(df: pd.DataFrame) -> pd.Series:
+    current_criticality = source_series(df, "Criticality").apply(criticality_from_severity)
+    severity = source_series(
+        df,
+        "Severity",
+        "Risk",
+        "CVSS3.1 Base",
+        "CVSS3 Base",
+        "CVSS v3.0 Base Score",
+        "CVSS Base",
+        "CVSS3.1",
+        "CVSS3",
+        "CVSS",
+    ).apply(criticality_from_severity)
+
+    return current_criticality.where(current_criticality.ne(""), severity)
+
+
+
+def three_uk_qualys_total_view(df: pd.DataFrame) -> pd.DataFrame:
+    out = pd.DataFrame(index=df.index)
+    direct_mappings = {
+        "IP": ("IP", "Host / Image", "Host"),
+        "Network": ("Network",),
+        "DNS": ("DNS",),
+        "NetBIOS": ("NetBIOS",),
+        "Tracking Method": ("Tracking Method",),
+        "OS": ("OS",),
+        "IP Status": ("IP Status",),
+        "QID": ("QID", "Scanner ID", "Plugin ID"),
+        "Title": ("Title", "Name"),
+        "Vuln Status": ("Vuln Status",),
+        "Type": ("Type",),
+        "Severity": ("Severity", "Risk"),
+        "Port": ("Port",),
+        "Protocol": ("Protocol",),
+        "FQDN": ("FQDN",),
+        "SSL": ("SSL",),
+        "First Detected": ("First Detected",),
+        "Last Detected": ("Last Detected",),
+        "Times Detected": ("Times Detected",),
+        "Date Last Fixed": ("Date Last Fixed",),
+        "CVE ID": ("CVE ID", "CVE"),
+        "Vendor Reference": ("Vendor Reference",),
+        "Bugtraq ID": ("Bugtraq ID",),
+        "CVSS": ("CVSS", "CVSS v3.0 Base Score"),
+        "CVSS Base": ("CVSS Base", "CVSS v3.0 Base Score"),
+        "CVSS Temporal": ("CVSS Temporal", "CVSS v3.0 Temporal Score"),
+        "CVSS Environment": ("CVSS Environment",),
+        "CVSS3": ("CVSS3.1", "CVSS3", "CVSS v3.0 Base Score"),
+        "CVSS3 Base": ("CVSS3.1 Base", "CVSS3 Base", "CVSS v3.0 Base Score"),
+        "CVSS3 Temporal": ("CVSS3.1 Temporal", "CVSS3 Temporal", "CVSS v3.0 Temporal Score"),
+        "Threat": ("Threat", "Synopsis"),
+        "Impact": ("Impact", "Description"),
+        "Solution": ("Solution",),
+        "Exploitability": ("Exploitability",),
+        "Associated Malware": ("Associated Malware",),
+        "Results": ("Results", "Plugin Output"),
+        "PCI Vuln": ("PCI Vuln",),
+        "Ticket State": ("Ticket State",),
+        "Instance": ("Instance",),
+        "Category": ("Category",),
+    }
+
+    for output_col in THREE_UK_QUALYS_TOTAL_COLUMNS:
+        if output_col == "Criticality":
+            out[output_col] = criticality_series(df)
+            continue
+
+        source_columns = direct_mappings.get(output_col, (output_col,))
+        out[output_col] = source_series(df, *source_columns)
+
+    return out[THREE_UK_QUALYS_TOTAL_COLUMNS]
