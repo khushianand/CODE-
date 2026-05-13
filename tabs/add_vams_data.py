@@ -31,10 +31,6 @@ from logic.vams_enrichment import (
     VAMS_COLUMNS,
 )
 
-from logic.excel_writer.three_uk_qualys import (
-    build_3uk_vams_matching_df,
-)
-
 from logic.excel_writer.formatting import (
     apply_table_formatting,
 )
@@ -258,37 +254,6 @@ class AddVamsDataTab(ttk.Frame):
                 continue
         return None
     
-    def _normalize_match_value(
-        self,
-        value,
-    ):
-
-        if value is None:
-            return ""
-
-        value = str(value)
-
-        value = value.strip()
-
-        value = value.lower()
-
-        value = value.replace(
-            "\n",
-            " ",
-        )
-
-        value = value.replace(
-            "\r",
-            " ",
-        )
-
-        value = " ".join(
-            value.split()
-        )
-
-        return value
-
-
     def _write_vams_columns_only(
         self,
         path: str,
@@ -397,9 +362,6 @@ class AddVamsDataTab(ttk.Frame):
                     )
                     if excel_row:
                         break
-                if not excel_row and idx < len(row_numbers):
-                    # Fallback: row-order mapping if key variation exists.
-                    excel_row = row_numbers[idx]
                 if not excel_row:
                     continue
                 row_updated = False
