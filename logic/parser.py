@@ -25,6 +25,7 @@ TEMPLATE_COLUMNS: List[str] = [
     "See Also",
     "Plugin Output",
     "CVSS v3.0 Base Score",
+    "CVSS v3.0 Temporal Score",
     "Release Remediation Plan",
     "Release Remediation Date",
     "Expert Severity",
@@ -153,12 +154,19 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
     ],
 
     "CVSS v3.0 Base Score": [
-        
-        "cvss",
         "cvss3",
+        "cvss3 base",
         "cvss v3",
         "cvss v3.0 base score",
-        
+        "reported cvss score",
+    ],
+
+    "CVSS v3.0 Temporal Score": [
+        "cvss3 temporal",
+        "cvss v3.0 temporal score",
+        "cvss temporal",
+        "expert cvss vector",
+        "reported cvss vector",
     ],
 
     "Release Remediation Plan": [
