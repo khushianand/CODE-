@@ -147,6 +147,7 @@ def is_three_uk_qualys_project(
     scanner: str,
 ) -> bool:
 
+    """Explain workflow and purpose of `is_three_uk_qualys_project` in this module."""
     return (
 
         str(project)
@@ -168,6 +169,7 @@ def detect_qualys_header_row(
     sheet_name: str,
 ) -> int:
 
+    """Explain workflow and purpose of `detect_qualys_header_row` in this module."""
     preview = pd.read_excel(
         path,
         sheet_name=sheet_name,
@@ -215,6 +217,7 @@ def severity_to_criticality(
     value: object,
 ) -> str:
 
+    """Explain workflow and purpose of `severity_to_criticality` in this module."""
     if pd.isna(value):
         return ""
 
@@ -257,6 +260,7 @@ def criticality_series(
     df: pd.DataFrame,
 ) -> pd.Series:
 
+    """Explain workflow and purpose of `criticality_series` in this module."""
     if "Severity" not in df.columns:
 
         return pd.Series(
@@ -280,6 +284,7 @@ def criticality_series(
 
 def map_risk(value):
 
+    """Explain workflow and purpose of `map_risk` in this module."""
     mapping = {
 
         "low": "Low",
@@ -297,6 +302,7 @@ def three_uk_qualys_total_view(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
 
+    """Explain workflow and purpose of `three_uk_qualys_total_view` in this module."""
     out = df.copy()
 
     # =====================================================
@@ -357,6 +363,7 @@ def build_3uk_qualys_total_sheet_df(
     sheet_name: str,
 ) -> pd.DataFrame:
 
+    """Explain workflow and purpose of `build_3uk_qualys_total_sheet_df` in this module."""
     header_row = detect_qualys_header_row(
         path,
         sheet_name,
@@ -418,6 +425,7 @@ def build_3uk_qualys_unique_sheet_df(
     total_df: pd.DataFrame,
 ) -> pd.DataFrame:
 
+    """Explain workflow and purpose of `build_3uk_qualys_unique_sheet_df` in this module."""
     column_mapping = {
 
         "Scanner ID":
@@ -518,6 +526,7 @@ def build_3uk_qualys_unique_sheet_df(
         series
     ):
 
+        """Explain workflow and purpose of `merge_semicolon_separated` in this module."""
         values = []
 
         for item in series.dropna():
