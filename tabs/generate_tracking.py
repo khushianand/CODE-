@@ -12,6 +12,7 @@ from logic.excel_writer.three_uk_qualys import (
     build_3uk_qualys_unique_sheet_df,
 )
 from utils.file_handler import list_excel_sheets, validate_file
+from utils.memory import memory_session, release_large_objects
 
 
 class GenerateTrackingTab(ttk.Frame):
@@ -132,6 +133,8 @@ class GenerateTrackingTab(ttk.Frame):
             self.run_btn.configure(
                 state="disabled"
             )
+            mem_ctx = memory_session(self.logger, "TAB2 Update Tracking Sheet")
+            mem_ctx.__enter__()
     
             self._validate_inputs()
     
@@ -295,6 +298,14 @@ class GenerateTrackingTab(ttk.Frame):
             )
     
         finally:
+            try:
+                mem_ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+            release_large_objects(
+                locals(),
+                ["raw_df", "master_df", "new_df", "old_df", "unique_df", "vams_df", "wb", "output"],
+            )
         
             self.run_btn.configure(
                 state="normal"
