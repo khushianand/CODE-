@@ -16,11 +16,13 @@ from logic.excel_writer.three_uk_qualys import (
 
 from logic.parser import parse_scan_file
 from utils.file_handler import list_excel_sheets, validate_file
+from utils.memory import memory_session, release_large_objects
 
 
 class MakeNewReportTab(ttk.Frame):
     """Parses raw scan, builds unique aggregation, writes standard workbook."""
     def __init__(self, master, app_state, logger):
+        """Explain workflow and purpose of `__init__` in this module."""
         super().__init__(master)
         self.state = app_state
         self.logger = logger
@@ -33,6 +35,7 @@ class MakeNewReportTab(ttk.Frame):
         self._build_ui()
 
     def _build_ui(self):
+        """Explain workflow and purpose of `_build_ui` in this module."""
         ttk.Label(self, text="Raw file").grid(row=0, column=0, sticky="w", padx=6, pady=6)
         ttk.Entry(self, textvariable=self.raw_file, width=72).grid(row=0, column=1, sticky="ew", padx=6, pady=6)
         ttk.Button(self, text="Browse", command=self._browse_raw).grid(row=0, column=2, padx=6, pady=6)
@@ -50,6 +53,7 @@ class MakeNewReportTab(ttk.Frame):
         self.columnconfigure(1, weight=1)
 
     def _browse_raw(self):
+        """Explain workflow and purpose of `_browse_raw` in this module."""
         path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx *.xls *.xlsm")])
         if not path:
             return
@@ -60,11 +64,13 @@ class MakeNewReportTab(ttk.Frame):
             self.raw_sheet.set(sheets[0])
 
     def _browse_output(self):
+        """Explain workflow and purpose of `_browse_output` in this module."""
         path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")])
         if path:
             self.output_file.set(path)
 
     def _validate_inputs(self):
+        """Explain workflow and purpose of `_validate_inputs` in this module."""
         validate_file(self.raw_file.get())
         if not self.raw_sheet.get():
             raise ValueError("Please select a raw sheet")
@@ -72,20 +78,20 @@ class MakeNewReportTab(ttk.Frame):
             raise ValueError("Please select output file")
 
     def run(self):
+        """Explain workflow and purpose of `run` in this module."""
         try:
-        
             self.run_btn.configure(
                 state="disabled"
             )
-
-            self._validate_inputs()
+            with memory_session(self.logger, "TAB1 Make New Report"):
+                self._validate_inputs()
 
             # -------------------------------------------------
             # SPECIAL FLOW:
             # 3UK + QUALYS
             # -------------------------------------------------
 
-            if (
+                if (
             
                 self.state["selected_project"]
                 .strip()
@@ -98,40 +104,40 @@ class MakeNewReportTab(ttk.Frame):
                 .strip()
                 .casefold()
                 == "qualys"
-            ):
+                ):
 
                 # ---------------------------------------------
                 # TOTAL VULNERABILITIES DF
                 # ---------------------------------------------
 
-                total_df = (
-                    build_3uk_qualys_total_sheet_df(
-                        self.raw_file.get(),
-                        self.raw_sheet.get(),
+                    total_df = (
+                        build_3uk_qualys_total_sheet_df(
+                            self.raw_file.get(),
+                            self.raw_sheet.get(),
+                        )
                     )
-                )
 
                 # ---------------------------------------------
                 # UNIQUE VULNERABILITIES DF
                 # ---------------------------------------------
 
-                unique_df = (
-                    build_3uk_qualys_unique_sheet_df(
-                        total_df
+                    unique_df = (
+                        build_3uk_qualys_unique_sheet_df(
+                            total_df
+                        )
                     )
-                )
 
                 # ---------------------------------------------
                 # DASHBOARD SOURCE
                 # ---------------------------------------------
 
-                summary_df = total_df
+                    summary_df = total_df
 
                 # ---------------------------------------------
                 # WRITE OUTPUT
                 # ---------------------------------------------
 
-                output = write_output(
+                    output = write_output(
                 
                     self.output_file.get(),
 
@@ -156,22 +162,22 @@ class MakeNewReportTab(ttk.Frame):
             # GENERIC FLOW
             # -------------------------------------------------
 
-            else:
+                else:
             
-                raw_df = parse_scan_file(
-                    self.raw_file.get(),
-                    self.raw_sheet.get(),
-                    self.state["selected_scanner"],
-                    self.state["selected_project"],
-                ).df
+                    raw_df = parse_scan_file(
+                        self.raw_file.get(),
+                        self.raw_sheet.get(),
+                        self.state["selected_scanner"],
+                        self.state["selected_project"],
+                    ).df
 
-                unique_df = aggregate_unique(
-                    raw_df
-                )
+                    unique_df = aggregate_unique(
+                        raw_df
+                    )
 
-                summary_df = raw_df
+                    summary_df = raw_df
 
-                output = write_output(
+                    output = write_output(
                 
                     self.output_file.get(),
 
@@ -196,31 +202,29 @@ class MakeNewReportTab(ttk.Frame):
             # APPLY FORMATTING
             # -------------------------------------------------
 
-            from openpyxl import (
-                load_workbook
-            )
+                from openpyxl import (
+                    load_workbook
+                )
 
-            wb = load_workbook(output)
+                wb = load_workbook(output)
 
-            for ws in wb.worksheets:
-            
-                apply_table_formatting(ws)
+                for ws in wb.worksheets:
+                    apply_table_formatting(ws)
 
-            wb.save(output)
-
-            wb.close()
+                wb.save(output)
+                wb.close()
 
             # -------------------------------------------------
 
-            self.logger.info(
-                "Make New Report generated: %s",
-                output,
-            )
+                self.logger.info(
+                    "Make New Report generated: %s",
+                    output,
+                )
 
-            messagebox.showinfo(
-                "Success",
-                f"Report generated:\n{output}",
-            )
+                messagebox.showinfo(
+                    "Success",
+                    f"Report generated:\n{output}",
+                )
 
         except Exception as exc:
         
@@ -234,7 +238,10 @@ class MakeNewReportTab(ttk.Frame):
             )
 
         finally:
-        
+            release_large_objects(
+                locals(),
+                ["raw_df", "total_df", "unique_df", "summary_df", "wb", "output"],
+            )
             self.run_btn.configure(
                 state="normal"
             )
