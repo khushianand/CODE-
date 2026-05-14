@@ -305,10 +305,17 @@ flowchart TD
 - Class: `FastVamsEnrichmentEngine` (`build_vams_lookup`, `enrich`, internal match).
 ```mermaid
 flowchart TD
-    A[build_vams_lookup] --> B[precompute hash maps by tiers]
-    C[enrich(df)] --> D[build_fast_keys per row]
-    D --> E[lookup tiered keys]
-    E --> F[merge VAMS columns]
+    A["build_vams_lookup"]
+    B["precompute hash maps by tiers"]
+    C["enrich(df)"]
+    D["build_fast_keys per row"]
+    E["lookup tiered keys"]
+    F["merge VAMS columns"]
+
+    A --> B
+    C --> D
+    D --> E
+    E --> F
 ```
 
 ## 7.16 `logic/summary_generator.py`
