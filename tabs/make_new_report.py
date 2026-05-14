@@ -16,6 +16,7 @@ from logic.excel_writer.three_uk_qualys import (
 
 from logic.parser import parse_scan_file
 from utils.file_handler import list_excel_sheets, validate_file
+from utils.memory import memory_session, release_large_objects
 
 
 class MakeNewReportTab(ttk.Frame):
@@ -73,19 +74,18 @@ class MakeNewReportTab(ttk.Frame):
 
     def run(self):
         try:
-        
             self.run_btn.configure(
                 state="disabled"
             )
-
-            self._validate_inputs()
+            with memory_session(self.logger, "TAB1 Make New Report"):
+                self._validate_inputs()
 
             # -------------------------------------------------
             # SPECIAL FLOW:
             # 3UK + QUALYS
             # -------------------------------------------------
 
-            if (
+                if (
             
                 self.state["selected_project"]
                 .strip()
@@ -98,40 +98,40 @@ class MakeNewReportTab(ttk.Frame):
                 .strip()
                 .casefold()
                 == "qualys"
-            ):
+                ):
 
                 # ---------------------------------------------
                 # TOTAL VULNERABILITIES DF
                 # ---------------------------------------------
 
-                total_df = (
-                    build_3uk_qualys_total_sheet_df(
-                        self.raw_file.get(),
-                        self.raw_sheet.get(),
+                    total_df = (
+                        build_3uk_qualys_total_sheet_df(
+                            self.raw_file.get(),
+                            self.raw_sheet.get(),
+                        )
                     )
-                )
 
                 # ---------------------------------------------
                 # UNIQUE VULNERABILITIES DF
                 # ---------------------------------------------
 
-                unique_df = (
-                    build_3uk_qualys_unique_sheet_df(
-                        total_df
+                    unique_df = (
+                        build_3uk_qualys_unique_sheet_df(
+                            total_df
+                        )
                     )
-                )
 
                 # ---------------------------------------------
                 # DASHBOARD SOURCE
                 # ---------------------------------------------
 
-                summary_df = total_df
+                    summary_df = total_df
 
                 # ---------------------------------------------
                 # WRITE OUTPUT
                 # ---------------------------------------------
 
-                output = write_output(
+                    output = write_output(
                 
                     self.output_file.get(),
 
@@ -156,22 +156,22 @@ class MakeNewReportTab(ttk.Frame):
             # GENERIC FLOW
             # -------------------------------------------------
 
-            else:
+                else:
             
-                raw_df = parse_scan_file(
-                    self.raw_file.get(),
-                    self.raw_sheet.get(),
-                    self.state["selected_scanner"],
-                    self.state["selected_project"],
-                ).df
+                    raw_df = parse_scan_file(
+                        self.raw_file.get(),
+                        self.raw_sheet.get(),
+                        self.state["selected_scanner"],
+                        self.state["selected_project"],
+                    ).df
 
-                unique_df = aggregate_unique(
-                    raw_df
-                )
+                    unique_df = aggregate_unique(
+                        raw_df
+                    )
 
-                summary_df = raw_df
+                    summary_df = raw_df
 
-                output = write_output(
+                    output = write_output(
                 
                     self.output_file.get(),
 
@@ -196,31 +196,29 @@ class MakeNewReportTab(ttk.Frame):
             # APPLY FORMATTING
             # -------------------------------------------------
 
-            from openpyxl import (
-                load_workbook
-            )
+                from openpyxl import (
+                    load_workbook
+                )
 
-            wb = load_workbook(output)
+                wb = load_workbook(output)
 
-            for ws in wb.worksheets:
-            
-                apply_table_formatting(ws)
+                for ws in wb.worksheets:
+                    apply_table_formatting(ws)
 
-            wb.save(output)
-
-            wb.close()
+                wb.save(output)
+                wb.close()
 
             # -------------------------------------------------
 
-            self.logger.info(
-                "Make New Report generated: %s",
-                output,
-            )
+                self.logger.info(
+                    "Make New Report generated: %s",
+                    output,
+                )
 
-            messagebox.showinfo(
-                "Success",
-                f"Report generated:\n{output}",
-            )
+                messagebox.showinfo(
+                    "Success",
+                    f"Report generated:\n{output}",
+                )
 
         except Exception as exc:
         
@@ -234,7 +232,10 @@ class MakeNewReportTab(ttk.Frame):
             )
 
         finally:
-        
+            release_large_objects(
+                locals(),
+                ["raw_df", "total_df", "unique_df", "summary_df", "wb", "output"],
+            )
             self.run_btn.configure(
                 state="normal"
             )

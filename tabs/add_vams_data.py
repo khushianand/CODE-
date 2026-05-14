@@ -39,6 +39,7 @@ from utils.file_handler import (
     list_excel_sheets,
     validate_file,
 )
+from utils.memory import memory_session, release_large_objects
 
 
 TOTAL_SHEET_CANDIDATES = (
@@ -499,6 +500,8 @@ class AddVamsDataTab(ttk.Frame):
             self.run_btn.configure(
                 state="disabled"
             )
+            mem_ctx = memory_session(self.logger, "TAB3 Add VAMS Data")
+            mem_ctx.__enter__()
 
             self._validate_inputs()
 
@@ -791,6 +794,22 @@ class AddVamsDataTab(ttk.Frame):
             )
 
         finally:
+            try:
+                mem_ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+            release_large_objects(
+                locals(),
+                [
+                    "total_df",
+                    "unique_df",
+                    "incoming_vams",
+                    "enriched_unique_df",
+                    "enriched_total_df",
+                    "engine",
+                    "output",
+                ],
+            )
 
             self.run_btn.configure(
                 state="normal"
