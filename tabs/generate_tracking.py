@@ -3,7 +3,7 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from logic.comparison_logic import aggregate_unique, classify_new_old, enrich_with_vams
+from logic.comparison_logic import aggregate_unique, classify_new_old
 from logic.excel_writer import write_output
 from logic.excel_writer.formatting import (apply_table_formatting,)
 from logic.parser import parse_scan_file
@@ -12,6 +12,7 @@ from logic.excel_writer.three_uk_qualys import (
     build_3uk_qualys_unique_sheet_df,
 )
 from utils.file_handler import list_excel_sheets, validate_file
+from utils.memory import memory_session, release_large_objects
 
 
 class GenerateTrackingTab(ttk.Frame):
@@ -25,8 +26,6 @@ class GenerateTrackingTab(ttk.Frame):
         self.master_sheet = tk.StringVar()
         self.raw_file = tk.StringVar()
         self.raw_sheet = tk.StringVar()
-        self.vams_file = tk.StringVar()
-        self.vams_sheet = tk.StringVar()
         self.output_file = tk.StringVar()
 
 
@@ -43,16 +42,11 @@ class GenerateTrackingTab(ttk.Frame):
         self.raw_combo = ttk.Combobox(self, textvariable=self.raw_sheet, state="readonly", width=35)
         self.raw_combo.grid(row=3, column=1, sticky="w", padx=6, pady=6)
 
-        self._file_row(4, "VAMS File (optional)", self.vams_file, self._browse_vams)
-        ttk.Label(self, text="VAMS sheet").grid(row=5, column=0, sticky="w", padx=6, pady=6)
-        self.vams_combo = ttk.Combobox(self, textvariable=self.vams_sheet, state="readonly", width=35)
-        self.vams_combo.grid(row=5, column=1, sticky="w", padx=6, pady=6)
-
-        self._file_row(6, "Output File", self.output_file, self._browse_output, save=True)
+        self._file_row(4, "Output File", self.output_file, self._browse_output, save=True)
 
 
         self.run_btn = ttk.Button(self, text="Run", command=self.run)
-        self.run_btn.grid(row=7, column=1, sticky="e", padx=6, pady=10)
+        self.run_btn.grid(row=5, column=1, sticky="e", padx=6, pady=10)
         self.columnconfigure(1, weight=1)
 
 
@@ -79,12 +73,6 @@ class GenerateTrackingTab(ttk.Frame):
             self.raw_file.set(path)
             self._load_sheets(path, self.raw_combo, self.raw_sheet)
 
-    def _browse_vams(self):
-        path = filedialog.askopenfilename(filetypes=[("Excel", "*.xlsx *.xls *.xlsm")])
-        if path:
-            self.vams_file.set(path)
-            self._load_sheets(path, self.vams_combo, self.vams_sheet)
-
     def _browse_output(self):
         path = filedialog.asksaveasfilename(defaultextension=".xlsx", filetypes=[("Excel", "*.xlsx")])
         if path:
@@ -98,10 +86,6 @@ class GenerateTrackingTab(ttk.Frame):
             validate_file(self.master_file.get())
             if not self.master_sheet.get():
                 raise ValueError("Please select master sheet")
-        if self.vams_file.get():
-            validate_file(self.vams_file.get())
-            if not self.vams_sheet.get():
-                raise ValueError("Please select VAMS sheet")
         if not self.output_file.get():
             raise ValueError("Please select output file")
 
@@ -132,6 +116,8 @@ class GenerateTrackingTab(ttk.Frame):
             self.run_btn.configure(
                 state="disabled"
             )
+            mem_ctx = memory_session(self.logger, "TAB2 Update Tracking Sheet")
+            mem_ctx.__enter__()
     
             self._validate_inputs()
     
@@ -207,35 +193,6 @@ class GenerateTrackingTab(ttk.Frame):
                     
     
             # -------------------------------------------------
-            # OPTIONAL VAMS ENRICHMENT
-            # -------------------------------------------------
-    
-            if self.vams_file.get():
-            
-                vams_df = parse_scan_file(
-                    self.vams_file.get(),
-                    self.vams_sheet.get(),
-                    self.state["selected_project"],
-                    self.state["selected_scanner"],
-                    require_rows_after_filter=False,
-                    apply_severity_filter=False,
-                ).df
-    
-                if vams_df.empty:
-                
-                    self.logger.warning(
-                        "VAMS file contains no rows after normalization; skipping VAMS merge"
-                    )
-    
-                else:
-                
-                    new_df, unique_df = enrich_with_vams(
-                        new_df,
-                        unique_df,
-                        vams_df,
-                    )
-    
-            # -------------------------------------------------
             # WRITE OUTPUT
             # -------------------------------------------------
     
@@ -295,6 +252,14 @@ class GenerateTrackingTab(ttk.Frame):
             )
     
         finally:
+            try:
+                mem_ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+            release_large_objects(
+                locals(),
+                ["raw_df", "master_df", "new_df", "old_df", "unique_df", "wb", "output"],
+            )
         
             self.run_btn.configure(
                 state="normal"

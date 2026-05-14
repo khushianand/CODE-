@@ -3,7 +3,6 @@
 import tkinter as tk
 from tkinter import scrolledtext, ttk
 
-from tabs.add_vams_data import AddVamsDataTab
 from tabs.generate_tracking import GenerateTrackingTab
 from tabs.make_new_report import MakeNewReportTab
 
@@ -17,15 +16,22 @@ class Window4Main(ttk.Frame):
         self._build()
 
     def _build(self):
-        nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=8, pady=8)
+        paned = ttk.Panedwindow(self, orient="vertical")
+        paned.pack(fill="both", expand=True, padx=8, pady=8)
+
+        upper = ttk.Frame(paned)
+        lower = ttk.Frame(paned)
+        paned.add(upper, weight=4)
+        paned.add(lower, weight=1)
+
+        nb = ttk.Notebook(upper)
+        nb.pack(fill="both", expand=True)
         nb.add(MakeNewReportTab(nb, self.state, self.logger), text="Make New Report")
         nb.add(GenerateTrackingTab(nb, self.state, self.logger), text="Update Tracking Sheet")
-        nb.add(AddVamsDataTab(nb, self.state, self.logger), text="Add VAMS Data")
 
-        ttk.Label(self, text="Logs").pack(anchor="w", padx=8)
-        self.log_text = scrolledtext.ScrolledText(self, height=8, state="disabled")
-        self.log_text.pack(fill="x", padx=8, pady=8)
+        ttk.Label(lower, text="Logs (drag separator to resize)").pack(anchor="w")
+        self.log_text = scrolledtext.ScrolledText(lower, height=8, state="disabled")
+        self.log_text.pack(fill="both", expand=True)
 
     def attach_log_handler(self):
         from utils.logger import UILogHandler
@@ -33,6 +39,24 @@ class Window4Main(ttk.Frame):
         handler = UILogHandler(self.append_log)
         handler.setFormatter(__import__("logging").Formatter("%(asctime)s | %(levelname)s | %(message)s", "%H:%M:%S"))
         self.logger.addHandler(handler)
+        self._attach_stdio_redirects()
+
+    def _attach_stdio_redirects(self):
+        import io
+        import sys
+
+        class _StreamToLog(io.TextIOBase):
+            def __init__(self, callback):
+                self.callback = callback
+
+            def write(self, s):
+                text = str(s).rstrip()
+                if text:
+                    self.callback(text)
+                return len(s)
+
+        sys.stdout = _StreamToLog(self.append_log)
+        sys.stderr = _StreamToLog(self.append_log)
 
     def append_log(self, msg: str):
         self.log_text.configure(state="normal")
