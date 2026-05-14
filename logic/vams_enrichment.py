@@ -26,10 +26,12 @@ VAMS_COLUMNS = [
 
 
 def _norm(value: object) -> str:
+    """Explain workflow and purpose of `_norm` in this module."""
     return str(value).strip().lower()
 
 def _split_multi_values(value):
 
+    """Explain workflow and purpose of `_split_multi_values` in this module."""
     if value is None:
         return []
 
@@ -96,12 +98,14 @@ def _extract_host_and_ports(value):
 
 def _is_numeric_like(value):
 
+    """Explain workflow and purpose of `_is_numeric_like` in this module."""
     if not value:
         return False
 
     return str(value).strip().isdigit()
 
 def _norm_port(value: object) -> str:
+    """Explain workflow and purpose of `_norm_port` in this module."""
     token = _norm(value)
 
     if re.match(r"^\d+\.0+$", token):
@@ -112,6 +116,7 @@ def _norm_port(value: object) -> str:
 
 def _fallback_cve_tokens(row: pd.Series) -> list[str]:
 
+    """Explain workflow and purpose of `_fallback_cve_tokens` in this module."""
     raw_cve_tokens = split_values(row.get("CVE", ""))
 
     normalized: list[str] = []
@@ -213,6 +218,7 @@ def _row_keys(
     include_port: bool,
 ) -> set[str]:
 
+    """Explain workflow and purpose of `_row_keys` in this module."""
     name = _norm(row.get("Name", ""))
 
     host_value = row.get("Host / Image", "")
@@ -266,6 +272,7 @@ def _value_in_merged_cell(
     merged_cell: str,
 ) -> bool:
 
+    """Explain workflow and purpose of `_value_in_merged_cell` in this module."""
     target_tokens = {
         _norm_port(token)
         for token in split_values(target)
@@ -429,6 +436,7 @@ def update_vams_existing_workbook(
     incoming_vams_df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
 
+    """Explain workflow and purpose of `update_vams_existing_workbook` in this module."""
     return enrich_with_vams(
         new_df,
         unique_df,

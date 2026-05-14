@@ -52,6 +52,7 @@ DISPOSITION_ORDER = [
 
 
 def _write_data_rows(ws, df: pd.DataFrame):
+    """Explain workflow and purpose of `_write_data_rows` in this module."""
     for row_idx, row in enumerate(df[TEMPLATE_COLUMNS].itertuples(index=False), start=3):
         for col_idx, value in enumerate(row, start=1):
             ws.cell(row=row_idx, column=col_idx, value=value)
@@ -67,6 +68,7 @@ def write_main_sheet(
     scanner: str,
 ):
 
+    """Explain workflow and purpose of `write_main_sheet` in this module."""
     write_headers(ws)
 
     ws["B1"] = project
@@ -86,6 +88,7 @@ def write_main_sheet(
     
 
 def _clear_dashboard(ws):
+    """Explain workflow and purpose of `_clear_dashboard` in this module."""
     ws._charts = []
     for row in ws.iter_rows():
         for cell in row:
@@ -104,6 +107,7 @@ def _clear_dashboard(ws):
     """
 
 def _hide_chart_source_columns(ws, start_col: int, width: int):
+    """Explain workflow and purpose of `_hide_chart_source_columns` in this module."""
     for col_idx in range(start_col, start_col + width):
         col = ws.column_dimensions[get_column_letter(col_idx)]
         col.hidden = False
@@ -115,6 +119,7 @@ def _hide_chart_source_columns(ws, start_col: int, width: int):
     """                  
 
 def _write_chart_source(ws, df: pd.DataFrame, start_row: int, start_col: int) -> int:
+    """Explain workflow and purpose of `_write_chart_source` in this module."""
     for col_offset, col_name in enumerate(df.columns):
         ws.cell(start_row, start_col + col_offset, col_name)
     for row_offset, row in enumerate(df.itertuples(index=False), start=1):
@@ -125,6 +130,7 @@ def _write_chart_source(ws, df: pd.DataFrame, start_row: int, start_col: int) ->
 
 
 def _color_series_points(series, colors):
+    """Explain workflow and purpose of `_color_series_points` in this module."""
     series.data_points = []
     for idx, color in enumerate(colors):
         point = DataPoint(idx=idx)
@@ -133,6 +139,7 @@ def _color_series_points(series, colors):
 
 
 def _add_pie(ws, title: str, source_row: int, source_col: int, size: int, anchor: str):    
+    """Explain workflow and purpose of `_add_pie` in this module."""
     chart = PieChart()
     chart.title = title
 #    data = Reference(ws, min_col=table_col + 1, min_row=table_row + 1, max_row=table_row + 1 + size)
@@ -152,6 +159,7 @@ def _add_pie(ws, title: str, source_row: int, source_col: int, size: int, anchor
 
 
 def _add_bar(ws, title: str, source_row: int, source_col: int, rows: int, cols: int, anchor: str):
+    """Explain workflow and purpose of `_add_bar` in this module."""
     chart = BarChart()
     chart.type = "col"
     chart.style = 10
@@ -173,6 +181,7 @@ def _add_bar(ws, title: str, source_row: int, source_col: int, rows: int, cols: 
     ws.add_chart(chart, anchor)
 
 def _append_pie_charts(ws, total_df: pd.DataFrame, unique_df: pd.DataFrame, source_col: int = DASHBOARD_SOURCE_START_COL) -> int:
+    """Explain workflow and purpose of `_append_pie_charts` in this module."""
     total_table = severity_chart_summary(total_df, include_total=False)
     unique_table = severity_chart_summary(unique_df, include_total=False)
 
@@ -187,6 +196,7 @@ def _append_pie_charts(ws, total_df: pd.DataFrame, unique_df: pd.DataFrame, sour
 
 
 def _append_vams_bar_charts(ws, vams_df: pd.DataFrame, source_row: int, source_col: int = DASHBOARD_SOURCE_START_COL):
+    """Explain workflow and purpose of `_append_vams_bar_charts` in this module."""
     reported_expert = expert_severity_summary(vams_df)
     disposition = disposition_summary(vams_df, DISPOSITION_ORDER)
 

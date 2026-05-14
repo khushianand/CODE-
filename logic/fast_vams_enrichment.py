@@ -370,6 +370,7 @@ def build_fast_keys(
 class FastVamsEnrichmentEngine:
 
     def __init__(self):
+        """Explain workflow and purpose of `__init__` in this module."""
         self.lookup = {}
 
     def build_vams_lookup(
@@ -412,6 +413,7 @@ class FastVamsEnrichmentEngine:
         target_df: pd.DataFrame,
     ) -> pd.DataFrame:
     
+        """Explain workflow and purpose of `enrich` in this module."""
         out = target_df.copy()
     
         keys_list = build_fast_keys(out)
