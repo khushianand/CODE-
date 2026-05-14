@@ -6,6 +6,7 @@ from tkinter import ttk
 class Window3ScannerSelection(ttk.Frame):
     """Stores selected scanner into shared app state."""
     def __init__(self, master, state, on_prev, on_next):
+        """Explain workflow and purpose of `__init__` in this module."""
         super().__init__(master)
         self.state = state
         self.on_prev = on_prev
@@ -14,6 +15,7 @@ class Window3ScannerSelection(ttk.Frame):
         self._build()
 
     def _build(self):
+        """Explain workflow and purpose of `_build` in this module."""
         ttk.Label(self, text="Select Scanner", font=("Segoe UI", 12, "bold")).pack(pady=10)
         self.combo = ttk.Combobox(self, values=["Nessus", "Qualys", "Anchor"], state="readonly")
         self.combo.set(self.scanner)
@@ -24,5 +26,6 @@ class Window3ScannerSelection(ttk.Frame):
         ttk.Button(btns, text="Next", command=self._next).pack(side="left", padx=8)
 
     def _next(self):
+        """Explain workflow and purpose of `_next` in this module."""
         self.state["selected_scanner"] = self.combo.get()
         self.on_next()

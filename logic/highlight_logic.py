@@ -11,6 +11,7 @@ SEVERITY_COLORS = {
 
 
 def severity_fill(severity: str) -> PatternFill:
+    """Explain workflow and purpose of `severity_fill` in this module."""
     color = SEVERITY_COLORS.get(str(severity).strip().title())
     if not color:
         return PatternFill(fill_type=None)
