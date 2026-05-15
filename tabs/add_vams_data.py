@@ -39,6 +39,8 @@ from utils.file_handler import (
     list_excel_sheets,
     validate_file,
 )
+from utils.memory import memory_session, release_large_objects
+from utils.performance import optimize_dataframe_memory, should_skip_full_formatting
 
 
 TOTAL_SHEET_CANDIDATES = (
@@ -71,6 +73,7 @@ class AddVamsDataTab(ttk.Frame):
         logger,
     ):
 
+        """Handle the init step for this module workflow."""
         super().__init__(master)
 
         self.state = app_state
@@ -88,6 +91,7 @@ class AddVamsDataTab(ttk.Frame):
 
     def _build(self):
 
+        """Handle the build step for this module workflow."""
         ttk.Label(
             self,
             text="Output file",
@@ -202,6 +206,7 @@ class AddVamsDataTab(ttk.Frame):
         )
 
     def _browse_output(self):
+        """Handle the browse output step for this module workflow."""
         path = filedialog.askopenfilename(
             filetypes=[("Excel", "*.xlsx")]
         )
@@ -211,6 +216,7 @@ class AddVamsDataTab(ttk.Frame):
 
 
     def _browse_raw(self):
+        """Handle the browse raw step for this module workflow."""
         path = filedialog.askopenfilename(
             filetypes=[
                 (
@@ -228,6 +234,7 @@ class AddVamsDataTab(ttk.Frame):
             sheets[0]
         )    
     def _validate_inputs(self):
+        """Handle the validate inputs step for this module workflow."""
         validate_file(
             self.output_file.get()
         )
@@ -244,6 +251,7 @@ class AddVamsDataTab(ttk.Frame):
         path: str,
         *sheet_names: str,
     ):
+        """Handle the read generated sheet step for this module workflow."""
         for sheet_name in sheet_names:
             try:
                 return read_sheet_as_df(
@@ -260,6 +268,7 @@ class AddVamsDataTab(ttk.Frame):
         sheet_name: str,
         enriched_df,
     ):
+        """Handle the write vams columns only step for this module workflow."""
         self.logger.info(
             "Opening workbook for VAMS writeback: %s",
             sheet_name,
@@ -429,6 +438,7 @@ class AddVamsDataTab(ttk.Frame):
         # -------------------------------------------------
         # READ SHEETS
         # -------------------------------------------------
+        """Handle the refresh dashboard charts step for this module workflow."""
         total_df = self._read_generated_sheet(
             path,
             *TOTAL_SHEET_CANDIDATES,
@@ -494,11 +504,14 @@ class AddVamsDataTab(ttk.Frame):
 
     def run(self):
 
+        """Handle the run step for this module workflow."""
         try:
 
             self.run_btn.configure(
                 state="disabled"
             )
+            mem_ctx = memory_session(self.logger, "TAB3 Add VAMS Data")
+            mem_ctx.__enter__()
 
             self._validate_inputs()
 
@@ -540,7 +553,7 @@ class AddVamsDataTab(ttk.Frame):
                 "Parsing incoming VAMS file..."
             )
 
-            incoming_vams = parse_scan_file(
+            incoming_vams = optimize_dataframe_memory(parse_scan_file(
 
                 self.raw_file.get(),
 
@@ -554,7 +567,7 @@ class AddVamsDataTab(ttk.Frame):
 
                 apply_severity_filter=False,
 
-            ).df
+            ).df)
 
             if incoming_vams.empty:
 
@@ -791,6 +804,22 @@ class AddVamsDataTab(ttk.Frame):
             )
 
         finally:
+            try:
+                mem_ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+            release_large_objects(
+                locals(),
+                [
+                    "total_df",
+                    "unique_df",
+                    "incoming_vams",
+                    "enriched_unique_df",
+                    "enriched_total_df",
+                    "engine",
+                    "output",
+                ],
+            )
 
             self.run_btn.configure(
                 state="normal"

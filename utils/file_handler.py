@@ -7,6 +7,7 @@ import pandas as pd
 
 
 def validate_file(path: str) -> None:
+    """Handle the validate file step for this module workflow."""
     p = Path(path)
     if not p.exists():
         raise FileNotFoundError(f"File not found: {path}")
@@ -15,5 +16,6 @@ def validate_file(path: str) -> None:
 
 
 def list_excel_sheets(path: str) -> List[str]:
+    """Handle the list excel sheets step for this module workflow."""
     validate_file(path)
     return pd.ExcelFile(path).sheet_names

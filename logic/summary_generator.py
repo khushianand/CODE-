@@ -13,6 +13,7 @@ SEVERITY_ORDER={
     }
    
 def _normalized_series(df: pd.DataFrame, column: str) -> pd.Series:
+    """Handle the normalized series step for this module workflow."""
     return df.get(column, pd.Series(dtype=str)).fillna("").astype(str).str.strip()
 
 
@@ -33,6 +34,7 @@ def _normalized_series(df: pd.DataFrame, column: str) -> pd.Series:
 # logic/summary_generator.py
 
 def _severity_counts(df: pd.DataFrame) -> List[Dict[str, object]]:
+    """Handle the severity counts step for this module workflow."""
     counts = []
     risk = _normalized_series(df, "Risk").str.lower()
 
@@ -48,6 +50,7 @@ def _severity_counts(df: pd.DataFrame) -> List[Dict[str, object]]:
     return counts
 
 def severity_summary(df: pd.DataFrame) -> pd.DataFrame:
+    """Handle the severity summary step for this module workflow."""
     counts = _severity_counts(df)
     total = sum(int(item["Count"]) for item in counts)
     counts.append({"Severity": "Total", "Count": total})
@@ -91,6 +94,7 @@ def expert_severity_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _split_summary_values(value: object) -> List[str]:
+    """Handle the split summary values step for this module workflow."""
     text = str(value or "").strip()
     if not text:
         return []

@@ -25,6 +25,7 @@ TEMPLATE_COLUMNS: List[str] = [
     "See Also",
     "Plugin Output",
     "CVSS v3.0 Base Score",
+    "CVSS v3.0 Temporal Score",
     "Release Remediation Plan",
     "Release Remediation Date",
     "Expert Severity",
@@ -153,12 +154,19 @@ COLUMN_ALIASES: Dict[str, List[str]] = {
     ],
 
     "CVSS v3.0 Base Score": [
-        
-        "cvss",
         "cvss3",
+        "cvss3 base",
         "cvss v3",
         "cvss v3.0 base score",
-        
+        "reported cvss score",
+    ],
+
+    "CVSS v3.0 Temporal Score": [
+        "cvss3 temporal",
+        "cvss v3.0 temporal score",
+        "cvss temporal",
+        "expert cvss vector",
+        "reported cvss vector",
     ],
 
     "Release Remediation Plan": [
@@ -209,6 +217,7 @@ class ParsedData:
 
 
 def norm_text(value: object) -> str:
+    """Handle the norm text step for this module workflow."""
     return " ".join(
         str(value)
         .strip()
@@ -219,6 +228,7 @@ def norm_text(value: object) -> str:
 
 
 def split_values(value: object) -> List[str]:
+    """Handle the split values step for this module workflow."""
     if value is None:
         return []
 
@@ -243,6 +253,7 @@ def split_values(value: object) -> List[str]:
 
 
 def merge_semicolon(values: Iterable[object]) -> str:
+    """Handle the merge semicolon step for this module workflow."""
     merged: List[str] = []
 
     for value in values:
@@ -254,6 +265,7 @@ def merge_semicolon(values: Iterable[object]) -> str:
 
 
 def highest_risk(values: Iterable[object]) -> str:
+    """Handle the highest risk step for this module workflow."""
     tokens = {
         v.lower()
         for v in split_values(merge_semicolon(values))
@@ -267,6 +279,7 @@ def highest_risk(values: Iterable[object]) -> str:
 
 
 def detect_header_row(path: str, sheet_name: str, scanner: str) -> int:
+    """Handle the detect header row step for this module workflow."""
     preview = pd.read_excel(
         path,
         sheet_name=sheet_name,
@@ -310,6 +323,7 @@ def detect_header_row(path: str, sheet_name: str, scanner: str) -> int:
 
 
 def _mapped_series(df: pd.DataFrame, target_col: str) -> pd.Series:
+    """Handle the mapped series step for this module workflow."""
     normalized_columns = {
         norm_text(col): col
         for col in df.columns
@@ -335,6 +349,7 @@ def normalize_columns(
     preserve_source_columns: bool = False,
 ) -> pd.DataFrame:
 
+    """Handle the normalize columns step for this module workflow."""
     out = pd.DataFrame(index=df.index)
 
     for target in TEMPLATE_COLUMNS:
@@ -445,6 +460,7 @@ def parse_scan_file(
     apply_severity_filter: bool = True,
 ) -> ParsedData:
 
+    """Handle the parse scan file step for this module workflow."""
     header_row = detect_header_row(
         path,
         sheet_name,
@@ -492,6 +508,7 @@ def parse_scan_file(
 
 
 def filter_severity(df: pd.DataFrame) -> pd.DataFrame:
+    """Handle the filter severity step for this module workflow."""
     risk = (
         df["Risk"]
         .astype(str)
@@ -528,6 +545,7 @@ def build_key(
     include_port: bool = True,
 ) -> pd.Series:
 
+    """Handle the build key step for this module workflow."""
     fields = (
         ["Name", "Host / Image", "Port", "CVE"]
         if include_port

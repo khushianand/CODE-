@@ -147,6 +147,7 @@ def is_three_uk_qualys_project(
     scanner: str,
 ) -> bool:
 
+    """Handle the is three uk qualys project step for this module workflow."""
     return (
 
         str(project)
@@ -168,6 +169,7 @@ def detect_qualys_header_row(
     sheet_name: str,
 ) -> int:
 
+    """Handle the detect qualys header row step for this module workflow."""
     preview = pd.read_excel(
         path,
         sheet_name=sheet_name,
@@ -215,6 +217,7 @@ def severity_to_criticality(
     value: object,
 ) -> str:
 
+    """Handle the severity to criticality step for this module workflow."""
     if pd.isna(value):
         return ""
 
@@ -257,6 +260,7 @@ def criticality_series(
     df: pd.DataFrame,
 ) -> pd.Series:
 
+    """Handle the criticality series step for this module workflow."""
     if "Severity" not in df.columns:
 
         return pd.Series(
@@ -280,6 +284,7 @@ def criticality_series(
 
 def map_risk(value):
 
+    """Handle the map risk step for this module workflow."""
     mapping = {
 
         "low": "Low",
@@ -297,6 +302,7 @@ def three_uk_qualys_total_view(
     df: pd.DataFrame,
 ) -> pd.DataFrame:
 
+    """Handle the three uk qualys total view step for this module workflow."""
     out = df.copy()
 
     # =====================================================
@@ -357,6 +363,7 @@ def build_3uk_qualys_total_sheet_df(
     sheet_name: str,
 ) -> pd.DataFrame:
 
+    """Handle the build 3uk qualys total sheet df step for this module workflow."""
     header_row = detect_qualys_header_row(
         path,
         sheet_name,
@@ -418,6 +425,7 @@ def build_3uk_qualys_unique_sheet_df(
     total_df: pd.DataFrame,
 ) -> pd.DataFrame:
 
+    """Handle the build 3uk qualys unique sheet df step for this module workflow."""
     column_mapping = {
 
         "Scanner ID":
@@ -518,6 +526,7 @@ def build_3uk_qualys_unique_sheet_df(
         series
     ):
 
+        """Handle the merge semicolon separated step for this module workflow."""
         values = []
 
         for item in series.dropna():
