@@ -20,10 +20,12 @@ DISPLAY_COLUMN_ALIASES = {
 
 
 def _normalized_header(value: object) -> str:
+    """Handle the normalized header step for this module workflow."""
     return " ".join(str(value).strip().lower().replace("_", " ").split())
 
 
 def _fill_from_display_alias(df: pd.DataFrame, target_col: str):
+    """Handle the fill from display alias step for this module workflow."""
     normalized_columns = {_normalized_header(col): col for col in df.columns}
     actual_target = normalized_columns.get(_normalized_header(target_col))
     if actual_target is not None and df[actual_target].fillna("").astype(str).str.strip().ne("").any():
@@ -40,6 +42,7 @@ def _fill_from_display_alias(df: pd.DataFrame, target_col: str):
 
 
 def read_sheet_as_df(path, sheet_name):
+    """Handle the read sheet as df step for this module workflow."""
     df = pd.read_excel(path, sheet_name=sheet_name, header=1)
     for col in TEMPLATE_COLUMNS:
         _fill_from_display_alias(df, col)        

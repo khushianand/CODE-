@@ -7,15 +7,18 @@ from typing import Callable, Optional
 
 class UILogHandler(logging.Handler):
     def __init__(self, callback: Callable[[str], None]):
+        """Handle the init step for this module workflow."""
         super().__init__()
         self.callback = callback
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Handle the emit step for this module workflow."""
         msg = self.format(record)
         self.callback(msg)
 
 
 def get_logger(name: str = "vuln_automation", ui_callback: Optional[Callable[[str], None]] = None) -> logging.Logger:
+    """Handle the get logger step for this module workflow."""
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     if not logger.handlers:

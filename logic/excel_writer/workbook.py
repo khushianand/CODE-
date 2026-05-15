@@ -42,6 +42,7 @@ _TOTAL_VULNERABILITY_ALIASES = {
 
 def _normalized_sheet_name(value: object) -> str:
 
+    """Handle the normalized sheet name step for this module workflow."""
     return " ".join(
         str(value)
         .strip()
@@ -55,6 +56,7 @@ def normalize_total_sheet_name(
     sheet_name: str,
 ) -> str:
 
+    """Handle the normalize total sheet name step for this module workflow."""
     if (
         _normalized_sheet_name(sheet_name)
         in _TOTAL_VULNERABILITY_ALIASES
@@ -66,6 +68,7 @@ def normalize_total_sheet_name(
 
 def autofit_worksheet_columns(ws):
 
+    """Handle the autofit worksheet columns step for this module workflow."""
     for column_cells in ws.columns:
 
         max_length = 0

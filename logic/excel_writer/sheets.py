@@ -4,7 +4,8 @@ from __future__ import annotations
 from typing import Optional
 import pandas as pd
 #from openpyxl.chart import PieChart, Reference
-from openpyxl.chart import BarChart, PieChart, Reference
+from openpyxl.chart import BarChart3D, PieChart3D, Reference
+from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.marker import DataPoint
 from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
@@ -30,7 +31,7 @@ from logic.excel_writer.three_uk_qualys import (
     THREE_UK_QUALYS_TOTAL_COLUMNS,
 )
 
-DASHBOARD_SOURCE_START_COL = 27  # AA: off-screen chart source data, keeping visible dashboard chart-only.
+DASHBOARD_SOURCE_START_COL = 1  # Store chart source in hidden rows below chart region.
 SEVERITY_CHART_COLORS = ["9B0F06", "D53E0F", "F77F00", "FCBF49"]
 BAR_CHART_COLORS = ["4472C4", "C00000", "F4B183", "C00000", "70AD47", "7030A0", "8064A2", "92D050"]
 WRAP_CENTER = Alignment(
@@ -52,6 +53,7 @@ DISPOSITION_ORDER = [
 
 
 def _write_data_rows(ws, df: pd.DataFrame):
+    """Handle the write data rows step for this module workflow."""
     for row_idx, row in enumerate(df[TEMPLATE_COLUMNS].itertuples(index=False), start=3):
         for col_idx, value in enumerate(row, start=1):
             ws.cell(row=row_idx, column=col_idx, value=value)
@@ -67,6 +69,7 @@ def write_main_sheet(
     scanner: str,
 ):
 
+    """Handle the write main sheet step for this module workflow."""
     write_headers(ws)
 
     ws["B1"] = project
@@ -86,6 +89,7 @@ def write_main_sheet(
     
 
 def _clear_dashboard(ws):
+    """Handle the clear dashboard step for this module workflow."""
     ws._charts = []
     for row in ws.iter_rows():
         for cell in row:
@@ -104,6 +108,7 @@ def _clear_dashboard(ws):
     """
 
 def _hide_chart_source_columns(ws, start_col: int, width: int):
+    """Handle the hide chart source columns step for this module workflow."""
     for col_idx in range(start_col, start_col + width):
         col = ws.column_dimensions[get_column_letter(col_idx)]
         col.hidden = False
@@ -115,16 +120,22 @@ def _hide_chart_source_columns(ws, start_col: int, width: int):
     """                  
 
 def _write_chart_source(ws, df: pd.DataFrame, start_row: int, start_col: int) -> int:
+    """Write chart source data and hide those rows so dashboard stays chart-focused."""
     for col_offset, col_name in enumerate(df.columns):
         ws.cell(start_row, start_col + col_offset, col_name)
     for row_offset, row in enumerate(df.itertuples(index=False), start=1):
         for col_offset, value in enumerate(row):
             ws.cell(start_row + row_offset, start_col + col_offset, value)
+
+    for row_idx in range(start_row, start_row + len(df) + 1):
+        ws.row_dimensions[row_idx].hidden = True
+
     return len(df)
 
 
 
 def _color_series_points(series, colors):
+    """Handle the color series points step for this module workflow."""
     series.data_points = []
     for idx, color in enumerate(colors):
         point = DataPoint(idx=idx)
@@ -132,8 +143,9 @@ def _color_series_points(series, colors):
         series.data_points.append(point)
 
 
-def _add_pie(ws, title: str, source_row: int, source_col: int, size: int, anchor: str):    
-    chart = PieChart()
+def _add_pie(ws, title: str, source_row: int, source_col: int, size: int, anchor: str):
+    """Create 3D pie chart with visible count/percentage data labels."""
+    chart = PieChart3D()
     chart.title = title
 #    data = Reference(ws, min_col=table_col + 1, min_row=table_row + 1, max_row=table_row + 1 + size)
 #    cats = Reference(ws, min_col=table_col, min_row=table_row + 2, max_row=table_row + 1 + size)
@@ -145,6 +157,11 @@ def _add_pie(ws, title: str, source_row: int, source_col: int, size: int, anchor
         _color_series_points(chart.series[0], SEVERITY_CHART_COLORS[:size])
     chart.height = 7
     chart.width = 12
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
+    chart.dataLabels.showPercent = True
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
     chart.plotVisOnly = False
     ws.add_chart(chart, anchor)
 
@@ -152,7 +169,8 @@ def _add_pie(ws, title: str, source_row: int, source_col: int, size: int, anchor
 
 
 def _add_bar(ws, title: str, source_row: int, source_col: int, rows: int, cols: int, anchor: str):
-    chart = BarChart()
+    """Create 3D bar chart with visible value labels for readability."""
+    chart = BarChart3D()
     chart.type = "col"
     chart.style = 10
     chart.title = title
@@ -169,14 +187,18 @@ def _add_bar(ws, title: str, source_row: int, source_col: int, rows: int, cols: 
         _color_series_points(chart.series[0], BAR_CHART_COLORS[:rows])
     chart.height = 7
     chart.width = 14
+    chart.dataLabels = DataLabelList()
+    chart.dataLabels.showVal = True
+    chart.dataLabels.showPercent = True
     chart.plotVisOnly = False
     ws.add_chart(chart, anchor)
 
 def _append_pie_charts(ws, total_df: pd.DataFrame, unique_df: pd.DataFrame, source_col: int = DASHBOARD_SOURCE_START_COL) -> int:
+    """Handle the append pie charts step for this module workflow."""
     total_table = severity_chart_summary(total_df, include_total=False)
     unique_table = severity_chart_summary(unique_df, include_total=False)
 
-    total_row = 3
+    total_row = 70
     unique_row = total_row + len(total_table) + 3
     total_size = _write_chart_source(ws, total_table, total_row, source_col)
     unique_size = _write_chart_source(ws, unique_table, unique_row, source_col)
@@ -187,10 +209,11 @@ def _append_pie_charts(ws, total_df: pd.DataFrame, unique_df: pd.DataFrame, sour
 
 
 def _append_vams_bar_charts(ws, vams_df: pd.DataFrame, source_row: int, source_col: int = DASHBOARD_SOURCE_START_COL):
+    """Handle the append vams bar charts step for this module workflow."""
     reported_expert = expert_severity_summary(vams_df)
     disposition = disposition_summary(vams_df, DISPOSITION_ORDER)
 
-    reported_row = source_row
+    reported_row = max(source_row, 90)
     disposition_row = reported_row + len(reported_expert) + 3
     reported_rows = _write_chart_source(ws, reported_expert, reported_row, source_col)
     disposition_rows = _write_chart_source(ws, disposition, disposition_row, source_col)

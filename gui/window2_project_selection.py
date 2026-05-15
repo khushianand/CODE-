@@ -6,6 +6,7 @@ from tkinter import ttk
 class Window2ProjectSelection(ttk.Frame):
     """Stores selected project into shared app state."""
     def __init__(self, master, state, on_prev, on_next):
+        """Handle the init step for this module workflow."""
         super().__init__(master)
         self.state = state
         self.on_prev = on_prev
@@ -14,6 +15,7 @@ class Window2ProjectSelection(ttk.Frame):
         self._build()
 
     def _build(self):
+        """Handle the build step for this module workflow."""
         ttk.Label(self, text="Select Project", font=("Segoe UI", 12, "bold")).pack(pady=10)
         self.combo = ttk.Combobox(self, values=["PTA", "3UK", "Airtel", "Antina", "AT&T Mexico", "AT&T US", "Fast-Web", "One NZ"], state="readonly")
         self.combo.set(self.project)
@@ -24,5 +26,6 @@ class Window2ProjectSelection(ttk.Frame):
         ttk.Button(btns, text="Next", command=self._next).pack(side="left", padx=8)
 
     def _next(self):
+        """Handle the next step for this module workflow."""
         self.state["selected_project"] = self.combo.get()
         self.on_next()

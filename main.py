@@ -13,6 +13,7 @@ from utils.logger import get_logger
 class App(tk.Tk):
     """Root app that stores shared state and navigates between wizard windows."""
     def __init__(self):
+        """Handle the init step for this module workflow."""
         super().__init__()
         self.title("Vulnerability Management Excel Automation")
         self.geometry("1200x780")
@@ -28,21 +29,26 @@ class App(tk.Tk):
         self.show_window1()
 
     def _swap(self, frame):
+        """Handle the swap step for this module workflow."""
         if self.current:
             self.current.destroy()
         self.current = frame
         self.current.pack(fill="both", expand=True)
 
     def show_window1(self):
+        """Handle the show window1 step for this module workflow."""
         self._swap(Window1Entry(self.container, self.state_data, self.show_window2))
 
     def show_window2(self):
+        """Handle the show window2 step for this module workflow."""
         self._swap(Window2ProjectSelection(self.container, self.state_data, self.show_window1, self.show_window3))
 
     def show_window3(self):
+        """Handle the show window3 step for this module workflow."""
         self._swap(Window3ScannerSelection(self.container, self.state_data, self.show_window2, self.show_window4))
 
     def show_window4(self):
+        """Handle the show window4 step for this module workflow."""
         frame = Window4Main(self.container, self.state_data, self.logger)
         self._swap(frame)
         frame.attach_log_handler()

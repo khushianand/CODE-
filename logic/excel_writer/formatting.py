@@ -95,6 +95,7 @@ def style_meta_row(
     total_cols: int = len(TEMPLATE_COLUMNS),
 ):
 
+    """Handle the style meta row step for this module workflow."""
     for col in range(1, total_cols + 1):
 
         cell = ws.cell(
@@ -117,6 +118,7 @@ def write_headers(
     columns: list[str] = TEMPLATE_COLUMNS,
 ):
 
+    """Handle the write headers step for this module workflow."""
     ws["A1"] = "Project Name:"
     ws["D1"] = "Scanner:"
 
@@ -164,6 +166,7 @@ def write_summary_headers(
     scanner: str,
 ):
 
+    """Handle the write summary headers step for this module workflow."""
     ws["A1"] = "Project Name:"
     ws["D1"] = "Scanner:"
 
@@ -179,6 +182,7 @@ def write_summary_headers(
 
 def apply_table_formatting(ws):
 
+    """Handle the apply table formatting step for this module workflow."""
     for row in ws.iter_rows():
 
         for cell in row:
@@ -210,6 +214,7 @@ def apply_table_formatting(ws):
 
 def auto_width(ws):
 
+    """Handle the auto width step for this module workflow."""
     for col in ws.columns:
 
         idx = col[0].column
